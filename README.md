@@ -107,6 +107,13 @@ Readers land in a verified, daily-rebuilt Qiskit container on
 reader's machine, no Qiskit-version drift between authoring and
 reading.
 
+> **Connecting to real IBM Quantum hardware from a Binder session?**
+> mybinder is a shared, public environment — don't call
+> `QiskitRuntimeService.save_account()` there. Follow IBM's
+> [setup for an untrusted environment](https://quantum.cloud.ibm.com/docs/en/guides/cloud-setup-untrusted):
+> pass your API key inline (or use a short-lived token) and rotate the
+> key after use.
+
 **The easiest way to build one** is the
 [launch generator at qubins.org](https://qubins.org/#launch): paste
 the repo or notebook URL, pick an image, copy the Binder URL (and the

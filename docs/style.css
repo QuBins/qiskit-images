@@ -562,3 +562,13 @@ footer {
   color: var(--fg-muted);
   font-size: 0.9em;
 }
+
+/* Actionable security guidance for users connecting to real IBM
+   Quantum hardware from the shared Binder environment. Stays within
+   the footer's muted register but a subtle accent rule lifts it just
+   above boilerplate so it isn't skimmed past. */
+footer .security-note {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.75rem;
+  color: var(--fg);
+}
