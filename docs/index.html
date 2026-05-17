@@ -282,6 +282,15 @@
     patient on cold starts and don&rsquo;t hammer the service. QuBins
     is just curated container images they pull.
   </p>
+  <p class="security-note">
+    <strong>Using real IBM Quantum hardware from Binder?</strong>
+    mybinder is a shared, public environment, so don&rsquo;t run
+    <code>QiskitRuntimeService.save_account()</code> there. Follow
+    IBM&rsquo;s
+    <a href="https://quantum.cloud.ibm.com/docs/en/guides/cloud-setup-untrusted" rel="noopener">setup
+    for an untrusted environment</a> &mdash; pass your API key inline
+    (or use a short-lived token) and rotate the key after use.
+  </p>
   <p>
     Qiskit is a trademark of IBM. QuBins is independent and not
     affiliated with IBM.
