@@ -270,6 +270,33 @@ jobs:
           echo "After:"
           df -h / | tail -1
 
+      # Pre-pull the buildkit image with retries before setup-buildx
+      # runs its own (unretried) pull. Docker Hub occasionally times
+      # out registry-1.docker.io — on 2026-06-02 (run 26807520486) a
+      # single 15s timeout in one of 26 build jobs cascaded into the
+      # entire day's manifest publish being skipped, because the
+      # manifest matrix `needs: build` and one build failure flunks
+      # the whole batch. Caching the image locally first makes the
+      # action's pull a no-op even if Docker Hub flakes. The manifest
+      # job uses setup-buildx too but only for `imagetools create`
+      # against GHCR (no Docker Hub pull involved), so it doesn't
+      # need the same guard.
+      - name: Pre-pull buildkit image (Docker Hub flake guard)
+        run: |
+          set -euo pipefail
+          img=moby/buildkit:buildx-stable-1
+          for attempt in 1 2 3; do
+            echo "::group::pull attempt ${attempt}"
+            if timeout 60 docker pull "${img}"; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "pull failed; sleeping before retry ${attempt}"
+            sleep $((attempt * 10))
+          done
+          echo "::warning::All pre-pull attempts failed; setup-buildx will try its own pull."
+
       - uses: docker/setup-buildx-action@v4
 
       - uses: docker/login-action@v4
@@ -383,10 +410,25 @@ jobs:
   manifest:
     name: manifest ${{ matrix.version }}
     needs: [plan, build]
-    # Only runs for versions actually built this run, and only when
-    # PUBLISH is true (main + workflow_dispatch). PR runs skip the
-    # manifest job entirely.
-    if: needs.plan.outputs.versions != '[]' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+    # Run per-version even when some *other* version's build failed.
+    # `needs: build` is a wait, not a hard gate: GitHub's default
+    # would skip every manifest entry if any build matrix entry
+    # failed (the manifest matrix would inherit the aggregate `needs`
+    # state). On 2026-06-02 (run 26807520486) a single Docker Hub
+    # timeout in one build job skipped all 13 manifest entries that
+    # day. The Combine per-arch tags step below already handles
+    # partial-arch availability (it only includes arches whose tags
+    # exist in GHCR), so a sibling build failure only voids that one
+    # version's manifest, not the other 12.
+    #
+    # `always()` lets us run even when needs.build.result is failure;
+    # `!cancelled()` still respects an explicit run cancellation.
+    # PR runs still skip via the branch/dispatch guard. PUBLISH=true
+    # check still applies at the step level inside.
+    if: >-
+      always() && !cancelled() &&
+      needs.plan.outputs.versions != '[]' &&
+      (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -476,13 +518,48 @@ jobs:
               tags+=("${REPO}:latest")
             fi
           fi
-          for tag in "${tags[@]}"; do
-            echo "::group::cosign verify ${tag}"
+          # Rekor (the transparency log cosign verify queries) is
+          # eventually-consistent: a signature pushed seconds ago may
+          # return "no signatures found" until the log entry
+          # propagates. Observed on 2026-05-31 (run 26706701946),
+          # where 3 of 13 manifests failed verify ~1.7s after a
+          # successful sign with `Error: no signatures found`. Retry
+          # a few times with backoff before declaring a real
+          # regression — a sustained verify failure across attempts
+          # still fails the job, which is the right blast radius for
+          # an unverifiable signature.
+          verify_with_retry() {
+            local tag="$1"
+            local attempt rc
+            for attempt in 1 2 3; do
+              if cosign verify \
+                  --certificate-identity-regexp="^https://github.com/${GITHUB_REPOSITORY}/" \
+                  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+                  "${tag}" >/dev/null 2>&1; then
+                if [ "${attempt}" -gt 1 ]; then
+                  echo "ok (after ${attempt} attempts)"
+                else
+                  echo "ok"
+                fi
+                return 0
+              fi
+              rc=$?
+              if [ "${attempt}" -lt 3 ]; then
+                local sleep_s=$((attempt * 5))
+                echo "verify attempt ${attempt} failed (rc=${rc}); sleeping ${sleep_s}s for Rekor propagation"
+                sleep "${sleep_s}"
+              fi
+            done
+            # Final attempt with output visible so the log captures the real error.
             cosign verify \
               --certificate-identity-regexp="^https://github.com/${GITHUB_REPOSITORY}/" \
               --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-              "${tag}" >/dev/null
-            echo "ok"
+              "${tag}"
+            return 1
+          }
+          for tag in "${tags[@]}"; do
+            echo "::group::cosign verify ${tag}"
+            verify_with_retry "${tag}"
             echo "::endgroup::"
           done
 
