@@ -75,12 +75,12 @@
 
     <div id="errors-block"></div>
 
-    <h3>GHCR pulls</h3>
-    <p class="hint">Cumulative pull counts reported by the GHCR API for <code>ghcr.io/qubins/images:&lt;tag&gt;</code>. Per-arch sub-tags and cosign signature objects are excluded.</p>
+    <h3>GHCR publish freshness</h3>
+    <p class="hint">When each user-facing tag of <code>ghcr.io/qubins/images:&lt;tag&gt;</code> was last refreshed. Per-arch sub-tags and cosign signature objects are excluded. GHCR doesn&rsquo;t expose pull counts for container packages, so this surfaces publish health instead — &ldquo;all tags refreshed in the last 24h&rdquo; tells you the daily cron is healthy.</p>
     <div class="stats-grid" id="ghcr-cards"></div>
     <table class="stats-tbl" id="ghcr-tbl">
       <thead>
-        <tr><th>Tag</th><th class="num">Pulls</th></tr>
+        <tr><th>Tag</th><th class="num">Last published</th></tr>
       </thead>
       <tbody></tbody>
     </table>

@@ -98,7 +98,12 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${ADMIN_PASSWORD:-}" ]; then
-            echo "::warning::ADMIN_PASSWORD secret is unset; admin page will remain locked."
+            # Use ::notice:: rather than ::warning::: the admin page is
+            # an optional speed-bump, and an unset secret is a deliberate
+            # opt-out, not a problem to flag — emitting it as a warning
+            # tagged every successful Pages run as having an annotation,
+            # poisoning the "warnings = nothing real" signal.
+            echo "::notice::ADMIN_PASSWORD secret is unset; admin page will remain locked."
             exit 0
           fi
           salt="$(openssl rand -hex 16)"

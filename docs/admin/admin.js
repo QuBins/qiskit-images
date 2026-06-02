@@ -124,10 +124,21 @@
       cards.innerHTML = `<div class="stat-card"><div class="label">GHCR</div><div class="value">—</div><div class="sub">not available</div></div>`;
       return;
     }
-    cards.appendChild(card("Total pulls", g.total_pulls.toLocaleString(), `across ${g.by_tag.length} tags`));
-    const top = g.by_tag[0];
-    if (top) {
-      cards.appendChild(card("Top tag", top.tag, `${top.pulls.toLocaleString()} pulls`));
+    // GHCR doesn't expose pull counts for container packages
+    // (download_count is always 0), so we surface publish freshness
+    // instead — actual operational signal. "All N tags refreshed in
+    // the last 24h" is what tells you the daily cron is healthy.
+    cards.appendChild(card(
+      "Tags published",
+      g.total_tags.toLocaleString(),
+      "multi-arch parent tags",
+    ));
+    if (g.latest_publish) {
+      cards.appendChild(card(
+        "Latest publish",
+        formatRelative(g.latest_publish),
+        new Date(g.latest_publish).toISOString().replace(/\.\d+Z$/, "Z"),
+      ));
     }
     for (const row of g.by_tag) {
       const tr = document.createElement("tr");
@@ -137,10 +148,24 @@
       td1.appendChild(code);
       const td2 = document.createElement("td");
       td2.className = "num";
-      td2.textContent = row.pulls.toLocaleString();
+      td2.textContent = formatRelative(row.updated_at);
+      td2.title = row.updated_at;
       tr.append(td1, td2);
       tbody.appendChild(tr);
     }
+  }
+
+  function formatRelative(iso) {
+    if (!iso) return "—";
+    const then = Date.parse(iso);
+    if (Number.isNaN(then)) return "—";
+    const delta = Date.now() - then;
+    const m = Math.floor(delta / 60000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 48) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    return `${d}d ago`;
   }
 
   function renderMybinder(m) {

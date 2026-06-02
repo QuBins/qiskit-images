@@ -3,13 +3,20 @@
 
 Two sources:
 
-1. GHCR pull counts for ghcr.io/qubins/images. Uses the
+1. GHCR publish freshness for ghcr.io/qubins/images. Uses the
    GitHub Packages API (`GET /orgs/QuBins/packages/container/images/
-   versions`) authenticated with GITHUB_TOKEN, which exposes a
-   `download_count` per package version + the tag list pointing at it.
-   We collapse the per-arch sub-tags (`2.4-small-amd64`, `…-arm64`,
-   `…sig`) into the parent multi-arch tag for a clean view, then also
-   keep the underlying details for the admin page to show.
+   versions`) authenticated with GITHUB_TOKEN to list every published
+   container version and its tag list + push timestamp.
+   (Historical note: GHCR's `download_count` is exposed by the API
+   but is *not* populated for container packages — it returns 0
+   regardless of real pull traffic. Reporting "0 total pulls" as
+   the headline metric was misleading rather than useful, so the
+   admin page surfaces *publish freshness* instead: how many tags
+   exist, when each was last refreshed, when the most recent
+   publish landed. This is real operational signal — "all 13 tags
+   refreshed in the last 24 h" tells you the daily cron is healthy;
+   a tag with a stale `updated_at` flags a publish regression.)
+   The mybinder section below carries the actual *usage* signal.
 
 2. mybinder launch counts from the public events archive at
    https://archive.analytics.mybinder.org/. Each day has a
@@ -21,14 +28,15 @@ Output schema:
     {
       "generated_at": "2026-05-16T07:33:21Z",
       "ghcr": {
-        "total_pulls":   1234,
+        "total_tags":   13,
+        "latest_publish": "2026-05-16T04:23:11Z",
         "by_tag": [
-          {"tag": "latest-small", "pulls": 240},
-          {"tag": "2.4-xl",       "pulls": 130},
+          {"tag": "2.4-xl",       "updated_at": "2026-05-16T04:23:11Z"},
+          {"tag": "latest-small", "updated_at": "2026-05-16T04:22:48Z"},
           ...
         ],
         "raw_versions": [
-          {"id": 12345, "tags": ["2.4-small"], "pulls": 130, "updated_at": "..."},
+          {"id": 12345, "tags": ["2.4-small"], "updated_at": "..."},
           ...
         ]
       },
@@ -145,41 +153,55 @@ def fetch_ghcr_versions(token: str) -> list[dict]:
 
 
 def summarize_ghcr(versions: list[dict]) -> dict:
-    """Collapse the version list into a clean per-tag view.
+    """Collapse the version list into a per-tag publish-freshness view.
 
     GHCR publishes each multi-arch manifest as one "version" with the
     parent tag (e.g. `2.4-small`), plus separate versions for each
     per-arch child manifest (`2.4-small-amd64`, `…-arm64`) and the
-    cosign signature (`sha256-….sig`). Pull counts on the per-arch
-    children and the signature blob aren't meaningful to a user
-    looking at "how many pulls of 2.4-small?", so we focus on tags
-    that don't carry the `-amd64`, `-arm64`, or `.sig` suffix.
+    cosign signature (`sha256-….sig`). Only the parent tags
+    correspond to user-facing image tags, so we drop the per-arch
+    suffixes and signature blobs.
+
+    For each surviving parent tag we record the most recent
+    `updated_at` across versions that carry it (a tag can move
+    between versions, so the latest is what counts). We deliberately
+    do NOT emit `download_count`/`total_pulls`: GHCR returns these
+    as 0 for container packages, and showing a meaningless 0 on the
+    admin page was misleading.
     """
     raw: list[dict] = []
-    by_tag: Counter[str] = Counter()
+    by_tag: dict[str, str] = {}
     for v in versions:
         tags = v.get("metadata", {}).get("container", {}).get("tags") or []
-        pulls = v.get("download_count") or 0
+        updated_at = v.get("updated_at")
         raw.append({
             "id": v.get("id"),
             "tags": tags,
-            "pulls": pulls,
-            "updated_at": v.get("updated_at"),
+            "updated_at": updated_at,
         })
+        if not updated_at:
+            continue
         for tag in tags:
             if tag.endswith("-amd64") or tag.endswith("-arm64"):
                 continue
             if tag.startswith("sha256-") or tag.endswith(".sig"):
                 continue
-            by_tag[tag] += pulls
+            # ISO-8601 UTC strings sort lexicographically; keep the
+            # newest publish for each tag.
+            prev = by_tag.get(tag)
+            if prev is None or updated_at > prev:
+                by_tag[tag] = updated_at
 
-    total = sum(by_tag.values())
+    # Newest first; ties broken by tag name for stable output.
     sorted_tags = sorted(
-        ({"tag": t, "pulls": n} for t, n in by_tag.items()),
-        key=lambda x: (-x["pulls"], x["tag"]),
+        ({"tag": t, "updated_at": ts} for t, ts in by_tag.items()),
+        key=lambda x: (x["updated_at"], x["tag"]),
+        reverse=True,
     )
+    latest_publish = sorted_tags[0]["updated_at"] if sorted_tags else None
     return {
-        "total_pulls": total,
+        "total_tags": len(sorted_tags),
+        "latest_publish": latest_publish,
         "by_tag": sorted_tags,
         "raw_versions": raw,
     }
@@ -283,8 +305,8 @@ def main() -> None:
             out["ghcr"] = summarize_ghcr(versions)
             print(
                 f"GHCR: {len(versions)} versions, "
-                f"{out['ghcr']['total_pulls']} total pulls across "
-                f"{len(out['ghcr']['by_tag'])} tags."
+                f"{out['ghcr']['total_tags']} user-facing tags, "
+                f"latest publish {out['ghcr']['latest_publish']}."
             )
         except Exception as e:  # noqa: BLE001 — best-effort
             out["errors"].append(f"GHCR fetch failed: {e}")
