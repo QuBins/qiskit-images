@@ -42,5 +42,5 @@ qiskit-addon-mpf~=0.3.0
 qiskit-addon-aqc-tensor[aer,quimb-jax]~=0.3.0; sys.platform != 'darwin'
 qiskit-addon-obp~=0.3.0
 qiskit-addon-cutting~=0.10.0
-qiskit-experiments~=0.14.0
+qiskit-experiments~=0.14.1
 gem-suite; platform_machine == "x86_64"
