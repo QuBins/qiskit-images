@@ -10,3 +10,20 @@
 # Re-evaluate when the upstream base image bumps nbclassic / drops
 # the vendored underscore.
 CVE-2026-27601
+
+# CVE-2026-25087 - apache-arrow C++ use-after-free DoS in pyarrow.
+#
+# Fixed in pyarrow 23.0.1. We cannot reach it: pyarrow is pulled in only
+# transitively, and qiskit-serverless (in every -xl/-xxl flavor) hard-caps
+# pyarrow<22 — true even of the latest serverless 0.32.0 (pyarrow<22,>=21).
+# serverless itself is locked at 0.30 in the xl requirements by the
+# runtime 0.45 / catalog 0.14 / transpiler 0.18 consistency set, so there
+# is no installable pyarrow that both clears the CVE and satisfies the
+# pinned ecosystem. The flaw is a DoS that requires processing a malicious
+# Arrow/Parquet payload (no network exposure in these notebooks); pyarrow
+# is not used directly by anything we ship.
+#
+# Drop this entry once qiskit-serverless relaxes its pyarrow<22 cap to
+# admit >=23.0.1 (track upstream), or if the xl serverless pin moves off
+# the 0.30 line to a release that does.
+CVE-2026-25087

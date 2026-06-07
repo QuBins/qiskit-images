@@ -7,6 +7,11 @@ on:
       - 'Dockerfile'
       - 'versions/**'
       - '.github/workflows/build-matrix.yml'
+      # .trivyignore changes the scan verdict for every image (it gates
+      # publish), so editing it must re-run the matrix — a new
+      # suppression needs to be proven against a real build, and a
+      # removed one must re-block.
+      - '.trivyignore'
   # PRs from any branch (Dependabot's `dependabot/...` branches don't
   # match the push filter above, so without this they'd merge without
   # ever exercising the build + Trivy gate).
@@ -16,6 +21,7 @@ on:
       - 'Dockerfile'
       - 'versions/**'
       - '.github/workflows/build-matrix.yml'
+      - '.trivyignore'
   schedule:
     # Daily rebuild + scan + republish at 04:00 UTC (= 05:00 CET, 06:00
     # CEST). Catches upstream base-image CVEs and dependency drift
@@ -157,9 +163,11 @@ jobs:
                 changed=$(git diff --name-only "${base}" "${HEAD_SHA}" || git diff --name-only "${base}")
                 echo "Changed files:"
                 echo "${changed}" | sed 's/^/  /'
-                # Universal-rebuild triggers: Dockerfile or this workflow.
-                if echo "${changed}" | grep -qE '^(Dockerfile|\.github/workflows/build-matrix\.yml)$'; then
-                  versions_json=$(full "Dockerfile or workflow changed")
+                # Universal-rebuild triggers: Dockerfile, this workflow,
+                # or .trivyignore (a suppression change affects the scan
+                # verdict of every image, so all must re-scan).
+                if echo "${changed}" | grep -qE '^(Dockerfile|\.github/workflows/build-matrix\.yml|\.trivyignore)$'; then
+                  versions_json=$(full "Dockerfile, workflow, or .trivyignore changed")
                 else
                   # Requirements dependency graph (pip `-r` includes):
                   #   <minor>-xxl  -r  <minor>-xl  -r  _xl-base.txt
