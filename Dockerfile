@@ -3,7 +3,7 @@
 # go through the full Trivy + smoke gate like any other change.
 # Tag retained in the comment for human readability — the digest is
 # the source of truth.
-FROM quay.io/jupyter/base-notebook:python-3.13@sha256:5bcf92a903b64a32b0d87a103b34e3e9fcab4d1e0c4579be9963966a09f9bbfb
+FROM quay.io/jupyter/base-notebook:python-3.13@sha256:e9bea43d53379c5cb4026eab828af7c6f5e3161b62ee118d361b909f4acf74ea
 
 ARG QISKIT_VERSION
 ENV QISKIT_VERSION=${QISKIT_VERSION}
