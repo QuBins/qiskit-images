@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d1117"/>
+      <stop offset="1" stop-color="#161b22"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1200" height="10" fill="#0969da"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <text x="80" y="210" font-size="120" font-weight="800" fill="#e6edf3">QuBins</text>
+    <text x="80" y="300" font-size="46" font-weight="600" fill="#58a6ff">Prebuilt Qiskit environments</text>
+    <text x="80" y="372" font-size="34" fill="#8b949e">Launch in Binder with one click, or pull with Docker.</text>
+    <text x="80" y="420" font-size="34" fill="#8b949e">Signed, Trivy-scanned, multi-arch, rebuilt daily.</text>
+    <g font-size="28" fill="#8b949e" font-weight="600">
+      <text x="80" y="540">cosign-signed</text>
+      <text x="320" y="540">·  Trivy-scanned</text>
+      <text x="600" y="540">·  multi-arch</text>
+      <text x="820" y="540">·  SLSA-attested</text>
+    </g>
+    <text x="80" y="585" font-size="26" fill="#6e7681">qubins.org  ·  Qiskit Ecosystem member</text>
+  </g>
+</svg>
