@@ -1,6 +1,7 @@
 # QuBins
 
 [![Build matrix](https://github.com/QuBins/qiskit-images/actions/workflows/build-matrix.yml/badge.svg)](https://github.com/QuBins/qiskit-images/actions/workflows/build-matrix.yml)
+[![Qiskit Ecosystem](https://qisk.it/e-6c640264)](https://qisk.it/e)
 
 **Prebuilt Qiskit environments.** Click a launch badge to run in your
 browser via mybinder, or `docker pull` on your laptop. Pick the
