@@ -27,3 +27,21 @@ CVE-2026-27601
 # admit >=23.0.1 (track upstream), or if the xl serverless pin moves off
 # the 0.30 line to a release that does.
 CVE-2026-25087
+
+# GHSA-36hh-v3qg-5jq4 - pyo3 out-of-bounds read in nth/nth_back for
+# PyList/PyTuple iterators (HIGH; fixed in 0.29.0).
+#
+# pyo3 is a Rust<->Python binding crate compiled *into* other packages'
+# native wheels in the base image's conda environment (e.g. cryptography
+# and friends); it is not a pip-installable package we pin or can
+# `pip upgrade` directly — the fix only arrives when those upstream
+# wheels rebuild against pyo3 0.29. It came in with the base bump to
+# 9388739d, which on balance is a big win: that digest cleared the
+# libssl, jupyter-server, PyJWT, tornado and cryptography findings AND
+# the rust-openssl/AWS-LC RCE set (CVE-2026-42327) that blocked the
+# earlier e9bea43 (#83) and 0b358e9e (#87) bumps. The flaw is an OOB
+# *read* (info-disclosure/crash), not RCE, reachable only via in-process
+# Python iterating a maliciously-constructed native sequence.
+#
+# Drop this once the base image's wheels rebuild against pyo3 >=0.29.0.
+GHSA-36hh-v3qg-5jq4
