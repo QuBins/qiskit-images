@@ -30,7 +30,14 @@ RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl ]]; then \
 # (a single ~250-byte text file) and the layer cache gets keyed on
 # ${QISKIT_VERSION} via the next RUN anyway.
 COPY versions /tmp/versions
+# jupyter-server upgrade patches CVE-2026-44727 (CRITICAL stored XSS in
+# NbconvertFileHandler) that base digest 9388739d still ships at 2.19.0;
+# fixed in 2.20.0. (An earlier 2.18.0 floor for a different CVE set was
+# dropped in #91 when the base caught up — this re-introduces the floor
+# for the new finding.) Remove once the base bumps jupyter-server past
+# the fix.
 RUN pip install --no-cache-dir --no-compile -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
+ && pip install --no-cache-dir --no-compile --upgrade 'jupyter-server>=2.20.0' \
  && rm -rf /tmp/versions \
  && fix-permissions "${CONDA_DIR}" \
  && fix-permissions "/home/${NB_USER}"
