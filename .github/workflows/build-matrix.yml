@@ -339,7 +339,14 @@ jobs:
             | sudo sh -s -- -b /usr/local/bin v0.70.0
           # Local image is single-platform (we built one), so no
           # --platform needed; trivy will find it via docker daemon.
+          # --timeout 15m: the default is 5m, which the largest image
+          # (2.4-xxl) intermittently blows past while walking layers —
+          # `context deadline exceeded` flaked the push build in run
+          # 27875622108 even though the identical commit passed on its PR.
+          # The flag bounds the scan generously without masking a real
+          # hang (a genuinely stuck scan still fails at 15m).
           trivy image \
+            --timeout 15m \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
             --exit-code 1 \
