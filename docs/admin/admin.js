@@ -182,10 +182,21 @@
       return;
     }
     cards.appendChild(card(
-      `Launches (${m.window_days}d)`,
+      `Organic launches (${m.window_days}d)`,
       m.total_launches.toLocaleString(),
       `${m.window_start} → ${m.window_end}`,
     ));
+    // Our binder-warmup cron launches the target branches twice a day;
+    // mybinder logs those as launches too. They're detected and stripped
+    // from the organic total above — surfaced here so the exclusion is
+    // visible rather than silent.
+    if (typeof m.warmup_launches_excluded === "number") {
+      cards.appendChild(card(
+        "Warm-up excluded",
+        m.warmup_launches_excluded.toLocaleString(),
+        "binder-warmup cron, not counted",
+      ));
+    }
     const top = m.by_branch[0];
     if (top) {
       cards.appendChild(card("Top branch", top.branch, `${top.launches.toLocaleString()} launches`));
