@@ -30,14 +30,24 @@ RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl ]]; then \
 # (a single ~250-byte text file) and the layer cache gets keyed on
 # ${QISKIT_VERSION} via the next RUN anyway.
 COPY versions /tmp/versions
-# jupyter-server upgrade patches CVE-2026-44727 (CRITICAL stored XSS in
-# NbconvertFileHandler) that base digest 9388739d still ships at 2.19.0;
-# fixed in 2.20.0. (An earlier 2.18.0 floor for a different CVE set was
-# dropped in #91 when the base caught up — this re-introduces the floor
-# for the new finding.) Remove once the base bumps jupyter-server past
-# the fix.
+# Two in-image security upgrades, both for findings the base digest
+# 9388739d still ships and that have an available fix (so Trivy's
+# --ignore-unfixed gate flags them on every flavor):
+#
+#  - jupyter-server: CVE-2026-44727 (CRITICAL stored XSS in
+#    NbconvertFileHandler), base ships 2.19.0, fixed in 2.20.0. (An
+#    earlier 2.18.0 floor for a different CVE set was dropped in #91 when
+#    the base caught up — this re-introduces the floor for the new
+#    finding.)
+#  - msgpack: GHSA-6v7p-g79w-8964 (HIGH out-of-bounds read / crash in
+#    MessagePack for Python), base conda env ships 1.1.2, fixed in 1.2.1.
+#    msgpack is a base/transitive package (no requirements.txt pin); the
+#    1.1.2 -> 1.2.1 minor bump satisfies the loose `msgpack<2` caps its
+#    downstream consumers (ray / qiskit-serverless) use.
+#
+# Remove each once the base image ships past the respective fix.
 RUN pip install --no-cache-dir --no-compile -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
- && pip install --no-cache-dir --no-compile --upgrade 'jupyter-server>=2.20.0' \
+ && pip install --no-cache-dir --no-compile --upgrade 'jupyter-server>=2.20.0' 'msgpack>=1.2.1' \
  && rm -rf /tmp/versions \
  && fix-permissions "${CONDA_DIR}" \
  && fix-permissions "/home/${NB_USER}"
