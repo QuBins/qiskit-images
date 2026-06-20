@@ -48,6 +48,87 @@
     margin: 1rem 0;
     font-size: 0.9em;
   }
+
+  /* Dashboard controls: window toggle + branch selector */
+  .dash-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin: 1rem 0 0.5rem;
+  }
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .seg button {
+    appearance: none;
+    border: 0;
+    border-left: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--fg);
+    font: inherit;
+    font-size: 0.9em;
+    padding: 0.3rem 0.8rem;
+    cursor: pointer;
+  }
+  .seg button:first-child { border-left: 0; }
+  .seg button:hover { background: var(--bg-soft); }
+  .seg button.active {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+  .dash-branch { font-size: 0.9em; color: var(--fg-muted); }
+  .dash-branch select {
+    margin-left: 0.4rem;
+    font: inherit;
+    padding: 0.25rem 0.4rem;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+
+  /* Charts (hand-rolled SVG, no dependencies) */
+  .chart-block { margin: 1.2rem 0; }
+  .chart-title { margin: 0 0 0.3rem; font-size: 1rem; }
+  .chart-hint { margin: 0 0 0.5rem; }
+  .chart {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+  }
+  .chart-svg { width: 100%; height: auto; display: block; }
+  .chart-svg .bar { fill: var(--accent); transition: opacity 0.1s ease; }
+  .chart-svg .bar:hover { opacity: 0.8; }
+  .chart-svg .bar.dim { opacity: 0.35; }
+  .chart-svg .axis { stroke: var(--border); stroke-width: 1; }
+  .chart-svg .axis-label,
+  .chart-svg .bar-label,
+  .chart-svg .bar-value { fill: var(--fg-muted); font-size: 11px; }
+  .chart-svg .bar-value { fill: var(--fg); }
+  .chart-svg .barrow { cursor: pointer; }
+  .chart-svg .barrow:focus { outline: none; }
+  .chart-svg .barrow:focus .bar,
+  .chart-svg .barrow.sel .bar { fill: var(--accent); }
+  .chart-svg .barrow.sel .bar-label { font-weight: 600; }
+
+  .chart-tooltip {
+    position: fixed;
+    z-index: 20;
+    pointer-events: none;
+    transform: translate(-50%, calc(-100% - 10px));
+    background: var(--fg);
+    color: var(--bg);
+    font-size: 0.8em;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  }
 </style>
 </head>
 <body class="locked">
@@ -85,18 +166,35 @@
       <tbody></tbody>
     </table>
 
-    <h3>mybinder launches (last 30 days)</h3>
-    <p class="hint">From the public <a href="https://archive.analytics.mybinder.org/" target="_blank" rel="noopener">mybinder events archive</a>. The archive lags a day or two; any missing days are listed below.</p>
+    <h3>mybinder launches</h3>
+    <p class="hint">Organic launches from the public <a href="https://archive.analytics.mybinder.org/" target="_blank" rel="noopener">mybinder events archive</a> (our own warm-up sweeps are filtered out). The archive lags a day or two; the window ends at the most recent day with data, and any missing days are listed below.</p>
+
+    <div class="dash-controls">
+      <div class="seg" id="mb-window" role="group" aria-label="Time window">
+        <button type="button" data-days="1">1d</button>
+        <button type="button" data-days="7">7d</button>
+        <button type="button" data-days="30" class="active">30d</button>
+      </div>
+      <label class="dash-branch">Branch
+        <select id="mb-branch"></select>
+      </label>
+    </div>
+
     <div class="stats-grid" id="mybinder-cards"></div>
-    <table class="stats-tbl" id="mybinder-branch-tbl">
-      <thead>
-        <tr><th>Branch / tag</th><th class="num">Launches</th></tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+
+    <div class="chart-block">
+      <h4 class="chart-title" id="mb-daily-title">Daily launches</h4>
+      <div class="chart" id="mb-daily-chart"></div>
+    </div>
+
+    <div class="chart-block">
+      <h4 class="chart-title">Launches by branch</h4>
+      <p class="hint chart-hint">Click a bar to drill into that branch; click it again to clear.</p>
+      <div class="chart" id="mb-branch-chart"></div>
+    </div>
 
     <details>
-      <summary>Daily breakdown</summary>
+      <summary>Daily breakdown (table)</summary>
       <table class="stats-tbl" id="mybinder-day-tbl">
         <thead>
           <tr><th>Date</th><th class="num">Launches</th></tr>
@@ -112,6 +210,7 @@
     </p>
   </section>
 </main>
+<div id="chart-tooltip" class="chart-tooltip" hidden></div>
 <script src="admin.js"></script>
 </body>
 </html>

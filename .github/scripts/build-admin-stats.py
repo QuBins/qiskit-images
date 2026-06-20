@@ -60,9 +60,21 @@ Output schema:
           {"date": "2026-05-15", "launches": 3},
           ...
         ],
+        "dates": ["2026-04-16", ..., "2026-05-15"],
+        "series": [
+          {"branch": "latest-xl", "total": 42,
+           "daily": [0, 1, 3, ...]},   # aligned 1:1 with "dates"
+          ...
+        ],
         "days_missing": []
       }
     }
+
+The `dates` + `series` pair is the per-branch-per-day matrix the admin
+dashboard slices client-side: each series' `daily` array lines up
+index-for-index with the shared `dates` axis, so the page can re-window
+(1/7/30 days) and drill into a single branch without re-fetching. The
+flat `by_branch`/`by_day` rollups are the row/column sums of that matrix.
 
 The admin page renders this directly. Best-effort: if a data source
 fails (rate limited, archive day missing, etc.) we still write the
@@ -320,6 +332,7 @@ def summarize_mybinder(window_days: int) -> dict:
 
     by_branch: Counter[str] = Counter()
     by_day: dict[str, int] = defaultdict(int)
+    by_branch_day: dict[tuple[str, str], int] = defaultdict(int)
     missing: list[str] = []
     warmup_total = 0
     # Archive entries have the shape `<owner>/<repo>/<ref>` directly
@@ -359,9 +372,11 @@ def summarize_mybinder(window_days: int) -> dict:
         # Strip our own warm-up sweeps; only organic launches remain.
         real_branches, warmup_count = filter_warmup_bursts(day_launches)
         warmup_total += warmup_count
+        iso = d.isoformat()
         for branch in real_branches:
             by_branch[branch] += 1
-        by_day[d.isoformat()] = len(real_branches)
+            by_branch_day[(branch, iso)] += 1
+        by_day[iso] = len(real_branches)
 
     by_branch_sorted = sorted(
         ({"branch": b, "launches": n} for b, n in by_branch.items()),
@@ -371,6 +386,19 @@ def summarize_mybinder(window_days: int) -> dict:
         {"date": d, "launches": by_day[d]}
         for d in sorted(by_day.keys())
     ]
+    # Per-branch-per-day matrix the admin dashboard slices client-side:
+    # each series' `daily` array lines up 1:1 with the shared `dates`
+    # axis (missing days included as 0). by_branch / by_day above are just
+    # its row / column sums, kept for any flat consumer.
+    dates = [d.isoformat() for d in days]
+    series = [
+        {
+            "branch": row["branch"],
+            "total": row["launches"],
+            "daily": [by_branch_day.get((row["branch"], date), 0) for date in dates],
+        }
+        for row in by_branch_sorted
+    ]
     return {
         "window_days": window_days,
         "window_start": days[0].isoformat(),
@@ -379,6 +407,8 @@ def summarize_mybinder(window_days: int) -> dict:
         "warmup_launches_excluded": warmup_total,
         "by_branch": by_branch_sorted,
         "by_day":    by_day_sorted,
+        "dates":     dates,
+        "series":    series,
         "days_missing": missing,
     }
 
