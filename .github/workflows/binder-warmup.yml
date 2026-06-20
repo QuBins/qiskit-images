@@ -63,7 +63,7 @@ jobs:
         github.event.workflow_run.event == 'workflow_dispatch'))
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # On workflow_run, pin to the SHA whose build just finished;
           # on workflow_dispatch, github.event.workflow_run is null so
