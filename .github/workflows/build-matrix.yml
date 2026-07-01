@@ -286,9 +286,13 @@ jobs:
       # manifest matrix `needs: build` and one build failure flunks
       # the whole batch. Caching the image locally first makes the
       # action's pull a no-op even if Docker Hub flakes. The manifest
-      # job uses setup-buildx too but only for `imagetools create`
-      # against GHCR (no Docker Hub pull involved), so it doesn't
-      # need the same guard.
+      # job runs setup-buildx too and needs the same guard: on
+      # 2026-07-01 (run 28502767061) its `buildx inspect --bootstrap`
+      # timed out on registry-1.docker.io ("context deadline exceeded")
+      # and voided the 2.4-xl manifest — setup-buildx bootstraps a
+      # builder by pulling the buildkit image from Docker Hub regardless
+      # of `imagetools create` later targeting GHCR. The manifest job
+      # carries an identical pre-pull step for this reason.
       - name: Pre-pull buildkit image (Docker Hub flake guard)
         run: |
           set -euo pipefail
@@ -455,6 +459,27 @@ jobs:
       - name: Compute lowercase owner
         id: repo
         run: echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      # Same Docker Hub flake guard the build job carries: setup-buildx
+      # below bootstraps a builder by pulling the buildkit image from
+      # registry-1.docker.io, which timed out on 2026-07-01 (run
+      # 28502767061) and voided the 2.4-xl manifest. Pre-pulling with
+      # retries makes the action's own (unretried) pull a no-op.
+      - name: Pre-pull buildkit image (Docker Hub flake guard)
+        run: |
+          set -euo pipefail
+          img=moby/buildkit:buildx-stable-1
+          for attempt in 1 2 3; do
+            echo "::group::pull attempt ${attempt}"
+            if timeout 60 docker pull "${img}"; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "pull failed; sleeping before retry ${attempt}"
+            sleep $((attempt * 10))
+          done
+          echo "::warning::All pre-pull attempts failed; setup-buildx will try its own pull."
 
       - uses: docker/setup-buildx-action@v4
 
