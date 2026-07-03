@@ -48,7 +48,7 @@ env:
   IMAGE: images
   # Qiskit minor that the :latest-<flavor> tags and latest-<flavor> stub
   # branches alias to. Bump when a new minor ships.
-  LATEST_QISKIT: '2.4'
+  LATEST_QISKIT: '2.5'
   # Only main and manual dispatch publish to GHCR or update stub
   # branches; feature branches build for CI signal but stay sandboxed.
   PUBLISH: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
@@ -93,6 +93,7 @@ jobs:
         run: |
           set -euo pipefail
           ALL=(
+            '2.5-small' '2.5-xl' '2.5-xxl'
             '2.4-small' '2.4-xl' '2.4-xxl'
             '2.3-small' '2.3-xl'
             '2.2-small' '2.2-xl'

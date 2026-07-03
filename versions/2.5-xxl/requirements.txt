@@ -1,0 +1,29 @@
+# Pinned reproducible environment for Qiskit 2.5 (XXL flavor).
+#
+# XXL = the full XL environment PLUS the heavy, torch/CUDA-pulling
+# Qiskit-ecosystem packages that would otherwise bloat XL for every
+# user. The entire XL set is pulled in by reference:
+#
+#   -r ../2.5-xl/requirements.txt
+#
+# pip resolves -r paths relative to *the file they appear in*, so this
+# chains: this file -> ../2.5-xl/requirements.txt -> ../_xl-base.txt,
+# each leg resolved relative to its own location. No duplication.
+#
+# What XXL adds on top of XL:
+#
+#   - qiskit-ibm-transpiler[ai-local-mode]: in 0.18 this hard-pulls
+#     qiskit-gym -> twisterl -> torch + the full CUDA 13 wheelset
+#     (~2.5 GB, unconditional — NOT gated by the [ai-local-mode]
+#     extra). That single dependency roughly 3.5x's the image, so it
+#     lives here rather than in XL. amd64-only on Linux: qiskit-gym
+#     0.4 ships no linux-aarch64 wheel and twisterl's torch chain has
+#     no aarch64 wheels either.
+#
+# This file is also the designated home for any *future* heavy extras
+# (GPU-accelerated Aer, JAX-accelerated backends, etc.) so we don't
+# repeat the XL-bloat exercise: add them here, not in XL.
+
+-r ../2.5-xl/requirements.txt
+
+qiskit-ibm-transpiler[ai-local-mode]~=0.18.0; platform_machine == "x86_64"

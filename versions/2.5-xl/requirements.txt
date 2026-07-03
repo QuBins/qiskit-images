@@ -1,0 +1,46 @@
+# Pinned reproducible environment for Qiskit 2.4 (XL flavor).
+# Based on Qiskit-documentation's nb-tester requirements (bumped to qiskit 2.4)
+# plus pylatexenc, pandas, and nbgitpuller for notebook authoring/distribution.
+#
+# The shared scientific-stack/notebook-tools dependencies (scipy, sklearn,
+# pyscf, plotly, sympy, ffsim, pylatexenc, nbgitpuller, pandas, python-sat,
+# jupyterlab-open-url-parameter) live in ../_xl-base.txt — pip resolves -r
+# paths relative to *this* file, so the shared base is reused across every
+# Qiskit minor's xl flavor.
+#
+# Pins are kept on Qiskit-ecosystem packages (tightly coupled, validated as
+# a set). Scientific-stack packages stay unpinned and resolved by pip.
+#
+# qiskit-ibm-transpiler is intentionally NOT here: in 0.18 it hard-pulls
+# qiskit-gym -> twisterl -> torch + the full CUDA 13 wheelset (~2.5 GB),
+# which is unconditional (not gated by the [ai-local-mode] extra). To
+# keep xl lean it lives only in the xxl flavor (../2.4-xxl). xl users
+# who want it can pip install it on demand.
+#
+# gem-suite is amd64-only: Rust extension, sdist only on aarch64, and
+# the base image has no Rust/C++ toolchain to build from source (also
+# pulls pymatching, sdist-only on aarch64, needing cmake + g++). arm64
+# users who want it can pip install it after adding the toolchain.
+
+-r ../_xl-base.txt
+
+qiskit[all]~=2.5.0
+# runtime stays at 0.45 because serverless 0.30 caps it at <0.46.0.
+# This set (runtime 0.45 + serverless 0.30 + catalog 0.14) is also the
+# one transpiler 0.18 is consistent with, so the xxl flavor (which adds
+# transpiler on top of this file) resolves without conflict.
+qiskit-ibm-runtime~=0.45.1
+qiskit-aer~=0.17
+qiskit-serverless~=0.30.0
+# catalog 0.15 demands serverless ~=0.31, but no transpiler release
+# supports serverless 0.31 yet; the latest mutually-consistent set is
+# catalog 0.14 + serverless 0.30 + runtime 0.45 (+ transpiler 0.18 in xxl).
+qiskit-ibm-catalog~=0.14.0
+qiskit-addon-sqd~=0.12.1
+qiskit-addon-utils~=0.3.1
+qiskit-addon-mpf~=0.3.0
+qiskit-addon-aqc-tensor[aer,quimb-jax]~=0.3.0; sys.platform != 'darwin'
+qiskit-addon-obp~=0.3.0
+qiskit-addon-cutting~=0.10.0
+qiskit-experiments~=0.14.1
+gem-suite; platform_machine == "x86_64"

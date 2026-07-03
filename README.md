@@ -46,7 +46,7 @@ Watch stdout for `http://127.0.0.1:8888/lab?token=…`. Add
 
 The bare `:latest` tag (what Docker pulls when no tag is specified) is
 `latest-small`; the alias `latest` follows the current Qiskit minor
-(today: `2.4`).
+(today: `2.5`).
 
 ## Versions
 
