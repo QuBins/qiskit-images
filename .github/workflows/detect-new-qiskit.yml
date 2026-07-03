@@ -9,6 +9,13 @@ on:
     - cron: '0 4 * * *'
   workflow_dispatch:
 
+# NOTE: the scaffold commit edits `.github/workflows/build-matrix.yml`, and the
+# default GITHUB_TOKEN is forbidden from pushing changes to files under
+# `.github/workflows/` (there is no grantable `workflows: write` permission key —
+# GITHUB_TOKEN simply can't do it). So this job authenticates with SCAFFOLD_TOKEN,
+# a PAT / fine-grained token carrying `contents: write` + `workflows: write`,
+# stored as a repo secret. Using it for `gh pr create` also means the scaffold PR
+# triggers CI, which a GITHUB_TOKEN-authored PR would not.
 permissions:
   contents: write       # for pushing the scaffolded branch
   pull-requests: write  # for `gh pr create`
@@ -19,6 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Persist this token as the git credential so the later `git push`
+          # can update workflow files. Must have `workflows: write`.
+          token: ${{ secrets.SCAFFOLD_TOKEN }}
 
       - uses: actions/setup-python@v6
         with:
@@ -84,7 +95,9 @@ jobs:
       - name: Commit, push, open PR
         if: steps.gate.outputs.go == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT with `workflows: write` — the scaffold commit touches
+          # build-matrix.yml, which GITHUB_TOKEN may not push.
+          GH_TOKEN: ${{ secrets.SCAFFOLD_TOKEN }}
           MINOR:   ${{ steps.pypi.outputs.minor }}
           VERSION: ${{ steps.pypi.outputs.version }}
           BRANCH:  ${{ steps.pypi.outputs.branch }}
