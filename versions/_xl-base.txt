@@ -10,6 +10,7 @@
 
 ffsim; sys.platform != 'win32'
 jupyterlab-open-url-parameter
+jupyterlab-rise
 nbgitpuller
 pandas
 plotly
