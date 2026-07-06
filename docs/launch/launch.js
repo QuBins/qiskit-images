@@ -7,6 +7,9 @@
 //   repo=<github url>      repo loader (nbgitpuller)
 //   branch=<ref>           optional, repo loader only
 //   path=<subpath>         optional, repo loader only
+//   ui=rise                repo loader only, needs path: land in the
+//                          jupyterlab-rise standalone presenter (the whole
+//                          tab is the slideshow) instead of JupyterLab
 //   file=<raw url>         single-file loader (jupyterlab-open-url-parameter)
 //
 // Precedence: `file` wins over `repo`; if neither, bare image launch.
@@ -35,6 +38,7 @@
   const branch = params.get("branch");
   const path   = params.get("path");
   const file   = params.get("file");
+  const ui     = params.get("ui");
 
   let url;
   if (file) {
@@ -50,7 +54,12 @@
     const inner = new URLSearchParams();
     inner.set("repo", repo);
     if (branch) inner.set("branch", branch);
-    inner.set("urlpath", path ? `lab/tree/${repoName}/${path}` : `lab/tree/${repoName}`);
+    // The rise presenter needs a concrete notebook; without a path,
+    // fall back to the Lab file browser as before.
+    inner.set("urlpath",
+      ui === "rise" && path ? `rise/${repoName}/${path}`
+        : path ? `lab/tree/${repoName}/${path}`
+        : `lab/tree/${repoName}`);
     const innerEncoded = encodeURIComponent("git-pull?" + inner.toString());
     url = `https://mybinder.org/v2/gh/${REPO}/${image}?urlpath=${innerEncoded}`;
   } else {
@@ -82,7 +91,8 @@
   try {
     if (window.umami && typeof window.umami.track === "function") {
       const mode = file ? "file" : (repo ? "repo" : "bare");
-      window.umami.track("launch-redirect", { image, mode });
+      const dest = ui === "rise" && repo && path ? "rise" : "lab";
+      window.umami.track("launch-redirect", { image, mode, ui: dest });
     }
   } catch (_) { /* analytics is best-effort */ }
 
