@@ -2,7 +2,8 @@ name: Binder warm-up
 
 # Pre-warm the mybinder.org image cache for the latest two Qiskit minors
 # (small + xl only — xxl is excluded; see "Resolve targets" below) plus
-# the `latest-{small,xl}` aliases, so the first user after a fresh image
+# the `latest-{small,xl}` aliases and any explicitly pinned extra
+# targets (see EXTRA in "Resolve targets"), so the first user after a fresh image
 # publish lands on a warm cache instead of paying the ~30s cold-pull
 # cost. mybinder.org has no official warm-up API;
 # we drive it via the public /build endpoint, which serves a
@@ -118,6 +119,30 @@ jobs:
           targets=("${warmable[0]}" "${warmable[1]}" \
                    "${warmable[2]}" "${warmable[3]}" \
                    "latest-small" "latest-xl")
+          # Pinned extras: targets warmed regardless of the rolling
+          # latest-two window because a known site depends on them.
+          # fun-with-quantum.org pins 2.1-xl, so keep it warm even
+          # though it has long since aged out of the window.
+          extra=('2.1-xl')
+          for e in "${extra[@]}"; do
+            # Fail loud if a pin is dropped from the matrix, so we
+            # never silently warm a nonexistent (404) image.
+            found=0
+            for v in "${all_versions[@]}"; do
+              [ "${v}" = "${e}" ] && found=1 && break
+            done
+            if [ "${found}" -eq 0 ]; then
+              echo "Pinned warm-up target '${e}' not found in build-matrix.yml ALL array." >&2
+              echo "Was it dropped from the matrix? Update the 'extra' list." >&2
+              exit 1
+            fi
+            # Dedup: skip if the window already covers it.
+            skip=0
+            for t in "${targets[@]}"; do
+              [ "${t}" = "${e}" ] && skip=1 && break
+            done
+            [ "${skip}" -eq 0 ] && targets+=("${e}")
+          done
           printf 'target: %s\n' "${targets[@]}"
           {
             echo "list<<EOF"
