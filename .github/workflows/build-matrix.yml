@@ -6,6 +6,9 @@ on:
     paths:
       - 'Dockerfile'
       - 'versions/**'
+      # Image-baked assets (e.g. the rise-flavor autolaunch watchdog) the
+      # Dockerfile COPYs in; a change here must rebuild the images.
+      - 'docker/**'
       - '.github/workflows/build-matrix.yml'
       # .trivyignore changes the scan verdict for every image (it gates
       # publish), so editing it must re-run the matrix — a new
@@ -20,6 +23,7 @@ on:
     paths:
       - 'Dockerfile'
       - 'versions/**'
+      - 'docker/**'
       - '.github/workflows/build-matrix.yml'
       - '.trivyignore'
   schedule:
@@ -180,6 +184,13 @@ jobs:
                   if echo "${changed}" | grep -qE '^versions/_xl-base\.txt$'; then
                     xl_base_changed=1
                   fi
+                  # The rise-flavor autolaunch watchdog lives under docker/
+                  # and is COPYed into every *-rise image by the Dockerfile,
+                  # so a change there must rebuild all -rise flavors.
+                  docker_changed=0
+                  if echo "${changed}" | grep -qE '^docker/'; then
+                    docker_changed=1
+                  fi
                   # Filter to versions/<v>/** changes and map back to
                   # canonical names; preserve ALL ordering and de-dupe.
                   selected=()
@@ -203,6 +214,11 @@ jobs:
                         selected+=("${v}")
                         continue
                       fi
+                    fi
+                    # The docker/ watchdog is baked into every -rise image.
+                    if [ "${docker_changed}" -eq 1 ] && [[ "${v}" == *-rise ]]; then
+                      selected+=("${v}")
+                      continue
                     fi
                     # A -rise flavor includes its -xl parent verbatim
                     # (e.g. 2.1-xl-rise -r ../2.1-xl/requirements.txt), so
