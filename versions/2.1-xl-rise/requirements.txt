@@ -1,0 +1,41 @@
+# Pinned environment for Qiskit 2.1 (XL-RISE flavor).
+#
+# XL-RISE = the full 2.1 XL environment PLUS the *classic* Notebook
+# frontend (nbclassic) and *classic* RISE. The entire XL set is pulled
+# in by reference:
+#
+#   -r ../2.1-xl/requirements.txt
+#
+# pip resolves -r paths relative to the file they appear in, so this
+# chains: this file -> ../2.1-xl/requirements.txt -> ../_xl-base.txt.
+#
+# Why a dedicated flavor: the Fun-with-Quantum slideshow games need a
+# RISE slideshow that ALSO renders interactive ipywidgets. jupyterlab-
+# rise (shipped in the -xl flavors) shows slides but renders ipywidgets
+# >=8 as text reprs (jupyterlab-contrib/rise#119). The only known-working
+# combination is classic RISE on the classic Notebook frontend, which is
+# what this flavor provides. It's a bridge: once rise#119 lands, the
+# games move back to the -xl `ui=rise` presenter and this flavor retires.
+#
+# Launch it via the redirector's `ui=rise-classic` mode, which targets
+# the nbclassic frontend through nbgitpuller:
+#   urlpath=nbclassic/notebooks/<repo>/<notebook>.ipynb
+
+-r ../2.1-xl/requirements.txt
+
+# Classic Notebook frontend. RISE 5.7.1's nbextension + ipywidgets'
+# classic `jupyter-js-widgets` extension both auto-enable under nbclassic
+# (via their bundled etc/jupyter/nbconfig data files — verified with
+# `jupyter nbclassic-extension list`), so no explicit enable step is
+# needed.
+nbclassic
+
+# Defensive floor: RISE 5.7.1 only requires notebook>=6.0, and an
+# accidental resolve down to the EOL notebook 6.x would drag in an
+# unmaintained server and light up the Trivy gate. The base image
+# already ships notebook 7, so this floor is a no-op in practice — it
+# just guarantees the resolver can never pick 6.x.
+notebook>=7
+
+# Classic RISE (reveal.js slideshow for the classic Notebook frontend).
+rise==5.7.1

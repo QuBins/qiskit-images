@@ -10,6 +10,10 @@
 //   ui=rise                repo loader only, needs path: land in the
 //                          jupyterlab-rise standalone presenter (the whole
 //                          tab is the slideshow) instead of JupyterLab
+//   ui=rise-classic        repo loader only, needs path: land in the
+//                          *classic* Notebook frontend + classic RISE
+//                          (renders interactive ipywidgets in slides).
+//                          Requires a rise-capable image (e.g. 2.1-xl-rise).
 //   file=<raw url>         single-file loader (jupyterlab-open-url-parameter)
 //
 // Precedence: `file` wins over `repo`; if neither, bare image launch.
@@ -54,10 +58,13 @@
     const inner = new URLSearchParams();
     inner.set("repo", repo);
     if (branch) inner.set("branch", branch);
-    // The rise presenter needs a concrete notebook; without a path,
+    // Both rise presenters need a concrete notebook; without a path,
     // fall back to the Lab file browser as before.
+    //   ui=rise         -> jupyterlab-rise (Lab-based standalone presenter)
+    //   ui=rise-classic -> classic Notebook frontend + classic RISE
     inner.set("urlpath",
       ui === "rise" && path ? `rise/${repoName}/${path}`
+        : ui === "rise-classic" && path ? `nbclassic/notebooks/${repoName}/${path}`
         : path ? `lab/tree/${repoName}/${path}`
         : `lab/tree/${repoName}`);
     const innerEncoded = encodeURIComponent("git-pull?" + inner.toString());
@@ -91,7 +98,12 @@
   try {
     if (window.umami && typeof window.umami.track === "function") {
       const mode = file ? "file" : (repo ? "repo" : "bare");
-      const dest = ui === "rise" && !file && repo && path ? "rise" : "lab";
+      // Which frontend the repo launch actually resolves to (file wins
+      // over repo, so a file launch is always "lab"). Mirrors the
+      // urlpath ternary above.
+      const dest = !file && repo && path
+        ? (ui === "rise" ? "rise" : ui === "rise-classic" ? "rise-classic" : "lab")
+        : "lab";
       window.umami.track("launch-redirect", { image, mode, ui: dest });
     }
   } catch (_) { /* analytics is best-effort */ }

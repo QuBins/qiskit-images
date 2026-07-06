@@ -121,9 +121,10 @@ jobs:
                    "latest-small" "latest-xl")
           # Pinned extras: targets warmed regardless of the rolling
           # latest-two window because a known site depends on them.
-          # fun-with-quantum.org pins 2.1-xl, so keep it warm even
-          # though it has long since aged out of the window.
-          extra=('2.1-xl')
+          # fun-with-quantum.org pins 2.1-xl (Lab launches) and
+          # 2.1-xl-rise (the classic-RISE slideshow games), both long
+          # aged out of the window — keep them warm.
+          extra=('2.1-xl' '2.1-xl-rise')
           for e in "${extra[@]}"; do
             # Fail loud if a pin is dropped from the matrix, so we
             # never silently warm a nonexistent (404) image.

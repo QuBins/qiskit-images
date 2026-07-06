@@ -97,7 +97,7 @@ jobs:
             '2.4-small' '2.4-xl' '2.4-xxl'
             '2.3-small' '2.3-xl'
             '2.2-small' '2.2-xl'
-            '2.1-small' '2.1-xl'
+            '2.1-small' '2.1-xl' '2.1-xl-rise'
             '2.0-small' '2.0-xl'
             '1.4-small' '1.4-xl'
           )
@@ -188,9 +188,10 @@ jobs:
                       selected+=("${v}")
                       continue
                     fi
-                    # _xl-base.txt feeds every -xl and (via -xl) every -xxl.
+                    # _xl-base.txt feeds every -xl and (via -xl) every
+                    # -xxl and -rise (both include an -xl file transitively).
                     if [ "${xl_base_changed}" -eq 1 ] \
-                       && { [[ "${v}" == *-xl ]] || [[ "${v}" == *-xxl ]]; }; then
+                       && { [[ "${v}" == *-xl ]] || [[ "${v}" == *-xxl ]] || [[ "${v}" == *-rise ]]; }; then
                       selected+=("${v}")
                       continue
                     fi
@@ -199,6 +200,16 @@ jobs:
                     if [[ "${v}" == *-xxl ]]; then
                       sibling_xl="${v%-xxl}-xl"
                       if echo "${changed}" | grep -qE "^versions/${sibling_xl}/"; then
+                        selected+=("${v}")
+                        continue
+                      fi
+                    fi
+                    # A -rise flavor includes its -xl parent verbatim
+                    # (e.g. 2.1-xl-rise -r ../2.1-xl/requirements.txt), so
+                    # an -xl edit must also rebuild the -rise sibling.
+                    if [[ "${v}" == *-rise ]]; then
+                      parent_xl="${v%-rise}"
+                      if echo "${changed}" | grep -qE "^versions/${parent_xl}/"; then
                         selected+=("${v}")
                         continue
                       fi
