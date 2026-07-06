@@ -256,6 +256,48 @@ a:hover {
   font-weight: 500;
 }
 
+/* Featured examples: two ready-made notebooks to click straight into,
+   sitting between the hero button and the Docker block. Cards wrap to a
+   single column below the breakpoint. Each card is a whole-surface link
+   to the /launch/ redirector. */
+.examples {
+  margin: 0.75rem 0 0.5rem 0;
+}
+.examples-label {
+  margin: 0 0 0.5rem 0;
+  font-weight: 500;
+}
+.example-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.example-card {
+  flex: 1 1 18rem;
+  display: block;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  text-decoration: none;
+  color: inherit;
+}
+.example-card:hover {
+  border-color: var(--accent);
+  text-decoration: none;
+}
+.example-title {
+  display: block;
+  font-weight: 600;
+  color: var(--accent);
+}
+.example-desc {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.9rem;
+  color: var(--fg-muted);
+}
+
 /* small vs xl vs xxl comparison table. Row header narrow & muted;
    small + xxl take just enough for their short prose; xl gets the
    widest share because it carries the long package list (the column

@@ -61,6 +61,17 @@
     heroBtn.href = `https://mybinder.org/v2/gh/${REPO}/latest-xl`;
     heroBtn.addEventListener("click", () =>
       track("hero-launch-click", { tag: "latest-xl" }));
+    // Featured example cards (static hrefs in index.html → /launch/).
+    // Wire best-effort click tracking so we can see which intro people
+    // actually open. The links work without JS; this only adds analytics.
+    for (const [id, example] of [
+      ["ex-first-program", "first-program"],
+      ["ex-coin-game", "coin-game"],
+    ]) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener("click", () =>
+        track("example-launch-click", { example }));
+    }
     document.getElementById("qs-docker-copy").addEventListener("click", (e) => {
       copyToClipboard(document.getElementById("qs-docker").textContent, e.currentTarget);
       track("hero-docker-copy");
