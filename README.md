@@ -63,7 +63,12 @@ Three flavors:
   specifically need the local AI transpiler.
 
 Currently published: 12 multi-arch (amd64 + arm64) images — 6 Qiskit
-minors × {small, xl} — plus 1 amd64-only `xxl` image, for 13 total.
+minors × {small, xl} — plus 1 amd64-only `xxl` image, plus 1
+special-purpose multi-arch `2.1-xl-rise` image, for 14 total. The
+latter is a bridge flavor (`2.1-xl` + the classic Notebook frontend +
+classic RISE) for slideshow notebooks whose interactive ipywidgets need
+classic RISE to render; launch it with `&ui=rise-classic`. It retires
+once [jupyterlab-rise renders ipywidgets](https://github.com/jupyterlab-contrib/rise/issues/119).
 The xl flavor is based on the [Qiskit-documentation notebook
 tester](https://github.com/Qiskit/documentation/tree/main/scripts/nb-tester);
 notebooks from the Qiskit documentation site should run unmodified.
