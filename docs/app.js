@@ -312,7 +312,7 @@
   let overrideMode = null;
 
   function wireGenerators() {
-    const ids = ["launch-url", "launch-branch", "launch-path", "launch-image"];
+    const ids = ["launch-url", "launch-branch", "launch-path", "launch-image", "launch-rise"];
     for (const id of ids) {
       const el = document.getElementById(id);
       el.addEventListener("input", refreshLaunch);
@@ -442,6 +442,15 @@
     } else if (effectiveMode === "clone") {
       const branchNow = branchField.value.trim();
       const pathNow   = pathField.value.trim();
+      // RISE presenter needs a concrete .ipynb path. Disable the toggle
+      // otherwise, and clear it so a stale check can't leak ui=rise into
+      // the built URL (refreshLaunch reads .checked after this runs).
+      const riseEl   = document.getElementById("launch-rise");
+      const riseWrap = document.getElementById("launch-rise-wrap");
+      const riseOk   = pathNow.endsWith(".ipynb");
+      riseEl.disabled = !riseOk;
+      if (!riseOk) riseEl.checked = false;
+      riseWrap.classList.toggle("disabled", !riseOk);
       const canSingle =
         det.repoUrl &&
         pathNow.endsWith(".ipynb") &&
@@ -524,14 +533,22 @@
       // /blob/ etc.), otherwise use the field as-is.
       const repoUrl  = det.repoUrl || document.getElementById("launch-url").value.trim();
       const repoName = det.repoName || "repo";
+      // RISE presenter needs a concrete .ipynb path (applyDetection has
+      // already disabled + cleared the toggle when the path isn't one).
+      // Mirrors the ui=rise handling in docs/launch/launch.js.
+      const rise = document.getElementById("launch-rise").checked && path.endsWith(".ipynb");
       const innerParams = new URLSearchParams();
       innerParams.set("repo", repoUrl);
       if (branch) innerParams.set("branch", branch);
-      innerParams.set("urlpath", path ? `lab/tree/${repoName}/${path}` : `lab/tree/${repoName}`);
+      innerParams.set("urlpath",
+        rise ? `rise/${repoName}/${path}`
+          : path ? `lab/tree/${repoName}/${path}`
+          : `lab/tree/${repoName}`);
       url = `https://mybinder.org/v2/gh/${REPO}/${image}?urlpath=${encodeURIComponent("git-pull?" + innerParams.toString())}`;
       launchParams.set("repo", repoUrl);
       if (branch) launchParams.set("branch", branch);
       if (path)   launchParams.set("path", path);
+      if (rise)   launchParams.set("ui", "rise");
     }
     out.value = url;
     open.href = url;
