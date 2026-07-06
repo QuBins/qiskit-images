@@ -69,6 +69,27 @@ RUN if [[ "${QISKIT_VERSION}" == *-rise ]]; then \
       && printf '%s\n' '{"autolaunch": true}' > "${CONDA_DIR}/etc/jupyter/nbconfig/rise.json" ; \
     fi
 
+# rise flavor: cold-cache autolaunch watchdog (QuBins#108). RISE's
+# autolaunch is a one-shot chain (main.js ~L1353) that races cold asset
+# loads and misses on the *first* page load, but works on every reload.
+# Ship a tiny nbextension — installed + enabled exactly the way RISE
+# enables itself (share/jupyter/nbextensions/<name>/main.js +
+# etc/jupyter/nbconfig/notebook.d/<name>.json) — that re-enters the
+# slideshow a beat after load iff RISE itself would have and we're not
+# already presenting. Full rationale in docker/rise-autolaunch/main.js.
+# The JS is added to the build context for every flavor (a ~3 KB file)
+# but only installed + enabled for *-rise images.
+COPY docker/rise-autolaunch/main.js /tmp/rise-autolaunch-main.js
+RUN if [[ "${QISKIT_VERSION}" == *-rise ]]; then \
+      mkdir -p "${CONDA_DIR}/share/jupyter/nbextensions/rise-autolaunch" \
+               "${CONDA_DIR}/etc/jupyter/nbconfig/notebook.d" \
+      && cp /tmp/rise-autolaunch-main.js \
+            "${CONDA_DIR}/share/jupyter/nbextensions/rise-autolaunch/main.js" \
+      && printf '%s\n' '{"load_extensions": {"rise-autolaunch/main": true}}' \
+            > "${CONDA_DIR}/etc/jupyter/nbconfig/notebook.d/rise-autolaunch.json" ; \
+    fi \
+ && rm -f /tmp/rise-autolaunch-main.js
+
 # Smoke test: catches wheels that resolve cleanly but break at import
 # time (e.g. a python-version bump where pip picked a wheel that
 # doesn't actually load). Runs at build time so the gate is the
