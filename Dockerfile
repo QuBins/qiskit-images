@@ -54,6 +54,21 @@ RUN pip install --no-cache-dir --no-compile -r /tmp/versions/${QISKIT_VERSION}/r
  && fix-permissions "${CONDA_DIR}" \
  && fix-permissions "/home/${NB_USER}"
 
+# rise flavor: auto-start the RISE slideshow on launch. RISE layers its
+# `autolaunch` setting (lowest -> highest priority) as: hardwired default
+# (off) -> this system nbconfig -> the notebook's own rise/livereveal
+# metadata. So this makes autostart the image default while any notebook
+# can still override it (e.g. autolaunch:false). RISE's is_slideshow()
+# guard means only notebooks that actually carry slide metadata
+# auto-present, so ordinary notebooks opened here are unaffected. This
+# fixes slideshow notebooks whose .ipynb omits the flag (e.g. GHZ-Game)
+# without a per-notebook edit. Config filename must be `rise.json` — the
+# name of the RISE nbconfig ConfigSection.
+RUN if [[ "${QISKIT_VERSION}" == *-rise ]]; then \
+      mkdir -p "${CONDA_DIR}/etc/jupyter/nbconfig" \
+      && printf '%s\n' '{"autolaunch": true}' > "${CONDA_DIR}/etc/jupyter/nbconfig/rise.json" ; \
+    fi
+
 # Smoke test: catches wheels that resolve cleanly but break at import
 # time (e.g. a python-version bump where pip picked a wheel that
 # doesn't actually load). Runs at build time so the gate is the
