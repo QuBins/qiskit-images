@@ -91,7 +91,7 @@
   try {
     if (window.umami && typeof window.umami.track === "function") {
       const mode = file ? "file" : (repo ? "repo" : "bare");
-      const dest = ui === "rise" && repo && path ? "rise" : "lab";
+      const dest = ui === "rise" && !file && repo && path ? "rise" : "lab";
       window.umami.track("launch-redirect", { image, mode, ui: dest });
     }
   } catch (_) { /* analytics is best-effort */ }

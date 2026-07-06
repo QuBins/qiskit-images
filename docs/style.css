@@ -471,6 +471,23 @@ form label select {
   margin-top: 0.25rem;
 }
 
+/* RISE toggle is a checkbox: inline box + label on one line, not the
+   stacked full-width field layout the other inputs use. */
+form .row label.check {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+form .row label.check input[type="checkbox"] {
+  display: inline-block;
+  width: auto;
+  height: auto;
+  margin: 0;
+}
+form .row label.check.disabled { opacity: 0.5; }
+
 /* Side-by-side form rows. Stack on narrow screens via flex-wrap. */
 form .row {
   display: flex;
