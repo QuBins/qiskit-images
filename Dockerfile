@@ -32,7 +32,7 @@ RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl || "${QISK
 # (a single ~250-byte text file) and the layer cache gets keyed on
 # ${QISKIT_VERSION} via the next RUN anyway.
 COPY versions /tmp/versions
-# Two in-image security upgrades, both for findings the base digest
+# Three in-image security upgrades, all for findings the base digest
 # 9388739d still ships and that have an available fix (so Trivy's
 # --ignore-unfixed gate flags them on every flavor):
 #
@@ -46,10 +46,14 @@ COPY versions /tmp/versions
 #    msgpack is a base/transitive package (no requirements.txt pin); the
 #    1.1.2 -> 1.2.1 minor bump satisfies the loose `msgpack<2` caps its
 #    downstream consumers (ray / qiskit-serverless) use.
+#  - mistune: CVE-2026-49851 (HIGH denial of service via crafted
+#    Markdown), base ships 3.2.1, fixed in 3.3.0. mistune is a transitive
+#    nbconvert dependency (no requirements.txt pin); nbconvert caps it at
+#    `mistune<4,>=2.0.3`, so the >=3.3.0 floor stays in range.
 #
 # Remove each once the base image ships past the respective fix.
 RUN pip install --no-cache-dir --no-compile -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
- && pip install --no-cache-dir --no-compile --upgrade 'jupyter-server>=2.20.0' 'msgpack>=1.2.1' \
+ && pip install --no-cache-dir --no-compile --upgrade 'jupyter-server>=2.20.0' 'msgpack>=1.2.1' 'mistune>=3.3.0' \
  && rm -rf /tmp/versions \
  && fix-permissions "${CONDA_DIR}" \
  && fix-permissions "/home/${NB_USER}"
