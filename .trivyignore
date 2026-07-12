@@ -1,15 +1,12 @@
-# CVE-2026-27601 - underscore.js DoS via flatten with recursive structures.
-#
-# The flagged 1.13.7 copy is a vendored static JS asset inside
-# nbclassic/static/components/underscore/package.json, not the
-# server-side underscore Python package (we don't depend on either).
-# It comes from the quay.io/jupyter/base-notebook base image; no
-# released nbclassic refreshes the bundled underscore yet, and we
-# don't expose nbclassic's classic UI in these notebooks.
-#
-# Re-evaluate when the upstream base image bumps nbclassic / drops
-# the vendored underscore.
-CVE-2026-27601
+# CVE-2026-27601 (underscore.js DoS) is no longer suppressed here: it is
+# now actually fixed in the image. The vulnerable 1.13.7 copy was a static
+# JS asset vendored by the base image's legacy nbclassic package, which the
+# Dockerfile now uninstalls (see the nbclassic note there). A suppression
+# in this file would not have helped downstream consumers anyway — a
+# repo-level .trivyignore does not propagate to images that re-scan the
+# published artifact (e.g. traQmania's release gate) — so the file had to
+# leave the image, and with it gone this entry is redundant. Keeping it out
+# means CI re-blocks if the removal ever regresses.
 
 # CVE-2026-25087 - apache-arrow C++ use-after-free DoS in pyarrow.
 #

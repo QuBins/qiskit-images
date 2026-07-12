@@ -52,8 +52,29 @@ COPY versions /tmp/versions
 #    `mistune<4,>=2.0.3`, so the >=3.3.0 floor stays in range.
 #
 # Remove each once the base image ships past the respective fix.
+#
+# 2026-07-12: also uninstall nbclassic to clear CVE-2026-27601 (HIGH,
+# underscore.js DoS via flatten on recursive structures). The base image
+# ships the legacy nbclassic classic-notebook UI, which vendors a static
+# copy of underscore.js 1.13.7 at
+#   nbclassic/static/components/underscore/package.json
+# (fixed upstream in underscore 1.13.8). No nbclassic release carries the
+# fix — 1.3.3 is the latest and still bundles 1.13.7 — so there is nothing
+# to pip-upgrade to. nbclassic is a deprecated, self-contained server
+# extension that nothing in these images requires (Required-by: none;
+# the served UIs are JupyterLab + notebook 7, neither of which depends on
+# it), so uninstalling it removes the only vulnerable copy without touching
+# the notebook experience. This must be a file-level removal, not a
+# .trivyignore suppression: a repo-level .trivyignore does not propagate to
+# downstream image consumers (e.g. traQmania's release gate re-scans the
+# published image and re-flags it), so the vulnerable file has to actually
+# leave the image. `pip uninstall -y` exits 0 if the package is already
+# absent, so this stays safe once a future base drops nbclassic.
+# Remove this step once the base image no longer ships nbclassic (or ships
+# one whose bundled underscore is >= 1.13.8).
 RUN pip install --no-cache-dir --no-compile -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
  && pip install --no-cache-dir --no-compile --upgrade 'jupyter-server>=2.20.0' 'msgpack>=1.2.1' 'mistune>=3.3.0' \
+ && pip uninstall -y nbclassic \
  && rm -rf /tmp/versions \
  && fix-permissions "${CONDA_DIR}" \
  && fix-permissions "/home/${NB_USER}"
