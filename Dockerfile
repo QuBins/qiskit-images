@@ -52,32 +52,36 @@ COPY versions /tmp/versions
 #    `mistune<4,>=2.0.3`, so the >=3.3.0 floor stays in range.
 #
 # Remove each once the base image ships past the respective fix.
-#
-# 2026-07-12: also uninstall nbclassic to clear CVE-2026-27601 (HIGH,
-# underscore.js DoS via flatten on recursive structures). The base image
-# ships the legacy nbclassic classic-notebook UI, which vendors a static
-# copy of underscore.js 1.13.7 at
-#   nbclassic/static/components/underscore/package.json
-# (fixed upstream in underscore 1.13.8). No nbclassic release carries the
-# fix — 1.3.3 is the latest and still bundles 1.13.7 — so there is nothing
-# to pip-upgrade to. nbclassic is a deprecated, self-contained server
-# extension that nothing in these images requires (Required-by: none;
-# the served UIs are JupyterLab + notebook 7, neither of which depends on
-# it), so uninstalling it removes the only vulnerable copy without touching
-# the notebook experience. This must be a file-level removal, not a
-# .trivyignore suppression: a repo-level .trivyignore does not propagate to
-# downstream image consumers (e.g. traQmania's release gate re-scans the
-# published image and re-flags it), so the vulnerable file has to actually
-# leave the image. `pip uninstall -y` exits 0 if the package is already
-# absent, so this stays safe once a future base drops nbclassic.
-# Remove this step once the base image no longer ships nbclassic (or ships
-# one whose bundled underscore is >= 1.13.8).
 RUN pip install --no-cache-dir --no-compile -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
  && pip install --no-cache-dir --no-compile --upgrade 'jupyter-server>=2.20.0' 'msgpack>=1.2.1' 'mistune>=3.3.0' \
- && pip uninstall -y nbclassic \
  && rm -rf /tmp/versions \
  && fix-permissions "${CONDA_DIR}" \
  && fix-permissions "/home/${NB_USER}"
+
+# CVE-2026-27601 (HIGH): the base image's legacy nbclassic classic-notebook
+# UI vendors a static copy of underscore.js 1.13.7 (DoS via flatten on
+# recursively nested input; fixed upstream in underscore 1.13.8) at
+#   nbclassic/static/components/underscore/{underscore-min.js,package.json}
+# No nbclassic release carries the fix — 1.3.3 is the latest and still
+# bundles 1.13.7 — so there is nothing to pip-upgrade to. We CANNOT just
+# uninstall nbclassic: the `rise-classic` launch mode (used by the featured
+# Quantum Coin Game) serves the classic Notebook frontend + classic RISE at
+# the `/nbclassic/` URL prefix, which the nbclassic server extension itself
+# provides — removing it 404s that UI. So instead patch the vendored copy in
+# place to the upstream-fixed 1.13.8 build (a drop-in patch release): swap
+# the loaded underscore-min.js and bump the two version manifests Trivy
+# reads. This ships genuinely fixed code, not a relabel. Applied wherever
+# nbclassic exists (every flavor derives from the same base); the guard
+# no-ops if a future base drops the package. Drop this whole step once the
+# base/nbclassic ships underscore >= 1.13.8.
+COPY docker/underscore-1.13.8 /tmp/underscore-1.13.8
+RUN us_dir="$(python3 -c 'import os, nbclassic; print(os.path.join(os.path.dirname(nbclassic.__file__), "static/components/underscore"))' 2>/dev/null || true)" \
+ && if [ -n "${us_dir}" ] && [ -d "${us_dir}" ]; then \
+      cp /tmp/underscore-1.13.8/underscore-min.js     "${us_dir}/underscore-min.js" \
+      && cp /tmp/underscore-1.13.8/package.json         "${us_dir}/package.json" \
+      && cp /tmp/underscore-1.13.8/modules/package.json "${us_dir}/modules/package.json" ; \
+    fi \
+ && rm -rf /tmp/underscore-1.13.8
 
 # rise flavor: auto-start the RISE slideshow on launch. RISE layers its
 # `autolaunch` setting (lowest -> highest priority) as: hardwired default
