@@ -37,7 +37,7 @@ qiskit-serverless~=0.30.0
 # catalog 0.14 + serverless 0.30 + runtime 0.45 (+ transpiler 0.18 in xxl).
 qiskit-ibm-catalog~=0.14.0
 qiskit-addon-sqd~=0.12.1
-qiskit-addon-utils~=0.3.1
+qiskit-addon-utils~=0.4.0
 qiskit-addon-mpf~=0.3.0
 qiskit-addon-aqc-tensor[aer,quimb-jax]~=0.3.0; sys.platform != 'darwin'
 qiskit-addon-obp~=0.3.0
