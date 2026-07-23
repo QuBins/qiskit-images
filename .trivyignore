@@ -65,3 +65,19 @@ GHSA-36hh-v3qg-5jq4
 # releases), or if the xl serverless pin moves to a Ray that already has it.
 CVE-2026-54512
 CVE-2026-54513
+
+# GHSA-r7wm-3cxj-wff9 - jackson-core async-parser maxNumberLength bypass
+# (HIGH; a crafted JSON number can exceed the configured length limit in the
+# non-blocking/async parser, a DoS; fixed in 2.18.8/2.21.4/2.22.1).
+#
+# Same situation and same jar as the jackson-databind pair above: the flagged
+# jackson-core 2.18.6 is vendored *inside* Ray's ray_dist.jar (xl/xxl only, via
+# qiskit-serverless ~=0.30); not pip-upgradable, so the fix only lands when Ray
+# rebundles a patched jackson. Entered Trivy's DB between the 07-21 (green) and
+# 07-22 (red) nightly runs, alongside the base-layer jupyterlab XSS advisories
+# fixed in-image on the Dockerfile pip line. The async streaming parser this
+# affects is not driven on untrusted input by anything these notebooks ship.
+#
+# Drop once Ray rebundles jackson-core >=2.18.8 (track upstream Ray releases),
+# or if the xl serverless pin moves to a Ray that already has it.
+GHSA-r7wm-3cxj-wff9
