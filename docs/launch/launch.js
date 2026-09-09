@@ -104,7 +104,9 @@
       const dest = !file && repo && path
         ? (ui === "rise" ? "rise" : ui === "rise-classic" ? "rise-classic" : "lab")
         : "lab";
-      window.umami.track("launch-redirect", { image, mode, ui: dest });
+      // Family taxonomy (Fun-with-Quantum/family/EVENTS.md): `launch` with target/image/notebook/ui.
+      // Replaces the earlier `launch-redirect` name; `mode` is kept as an extra property.
+      window.umami.track("launch", { target: "qubins", image, mode, ui: dest, notebook: (file || path || "") });
     }
   } catch (_) { /* analytics is best-effort */ }
 
