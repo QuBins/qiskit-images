@@ -631,3 +631,14 @@ footer .security-note {
   padding-left: 0.75rem;
   color: var(--fg);
 }
+
+/* Family footer block, rendered from family.json in JanLahmann/Fun-with-Quantum
+   (between FWQ-FAMILY markers in index.html — regenerated, never hand-edited). */
+.family-footer { margin: 1.5rem 0 0; }
+.family-footer > div { margin: 0.4rem 0; }
+.family-footer-tagline { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8em; letter-spacing: 0.08em; }
+.family-footer-members { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.6rem 1.25rem; }
+.family-footer .member { display: block; line-height: 1.3; text-decoration: none; color: inherit; }
+.family-footer .member span { display: block; color: var(--fg); }
+.family-footer .member:hover span { color: var(--accent); }
+.family-footer .member small { display: block; font-size: 0.85em; color: var(--fg-muted); }
