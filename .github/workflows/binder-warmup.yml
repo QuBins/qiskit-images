@@ -174,10 +174,34 @@ jobs:
         # a stray case-sensitive hop on top of the federation one).
         #
         # We read the stream until we see `phase: ready`, then close.
-        # Per-target timeout is 5 minutes; our stubs are `FROM
-        # <prebuilt>` so a warm or warm-ish backend resolves in well
-        # under a minute. Cold backends may exceed that, in which
-        # case we move on — partial coverage is still useful.
+        # Our stubs are `FROM <prebuilt>` so a warm or warm-ish backend
+        # resolves in well under a minute. Cold backends may exceed the
+        # budget, in which case we move on — partial coverage is still
+        # useful.
+        #
+        # The budget is split by flavor because a flat 5 minutes was
+        # cutting the xl tail off mid-pull. Measured over 21 runs
+        # (168 target-warms, 2026-09-02..09-11):
+        #
+        #   flavor   confirmed  median  p90   slowest confirmed
+        #   small      63/63     ~32s   ~95s     126s
+        #   xl         78/105    ~43s  ~126s     275s
+        #
+        # No -small target timed out once; every miss was xl. And the
+        # slowest confirmed xl warm landed at 275s — 25s under the cap —
+        # with three more past 240s, i.e. we were truncating a
+        # distribution that had not finished rather than one that had
+        # stalled. The timeouts are consistent with that: they report
+        # bytes still arriving (`timed out after 300002 ms with 17069
+        # bytes received`), not a hung connection.
+        #
+        # So: 600s for xl (double the old cap, ~2.2x the slowest warm we
+        # have ever confirmed), 300s kept for small, which has never
+        # needed more than 126s. This only extends how long we are
+        # willing to *watch*; it does not make mybinder do more work.
+        # Worst case the job grows from ~40min to ~65min if every target
+        # times out, against a ~12min median today — fine for a 12-hourly
+        # best-effort job, and well inside the 360min default job cap.
         #
         # 10s pacing between targets to be polite to a shared
         # community service.
@@ -188,7 +212,19 @@ jobs:
           warm_one() {
             local target="$1"
             local url="https://mybinder.org/build/gh/${owner_lc}/${repo_lc}/${target}"
-            echo "::group::Warming ${target}"
+            # See the flavor-split budget note above. Matching on
+            # *small* rather than listing versions keeps this correct as
+            # the rolling window advances; everything else (xl, xl-rise,
+            # and any future heavy flavor) gets the longer budget, which
+            # is the safe default -- a too-long budget costs watch time
+            # on a target that would have missed anyway, a too-short one
+            # discards a warm that was nearly done.
+            local max_time
+            case "${target}" in
+              *small*) max_time=300 ;;
+              *)       max_time=600 ;;
+            esac
+            echo "::group::Warming ${target} (budget ${max_time}s)"
             echo "GET ${url}"
             local rc=0
             # awk exit codes: 0 = saw phase:ready, 2 = saw phase:failed,
@@ -218,7 +254,7 @@ jobs:
             # "curl: (23) Failure writing output to destination" to
             # stderr — that's expected and not an error condition.
             set +o pipefail
-            if curl -sSL -N --max-time 300 \
+            if curl -sSL -N --max-time "${max_time}" \
                   -H 'Accept: text/event-stream' \
                   "${url}" \
                 | awk '
