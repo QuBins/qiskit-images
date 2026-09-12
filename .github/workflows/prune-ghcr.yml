@@ -1,0 +1,83 @@
+name: Prune GHCR versions
+
+# Garbage-collect GHCR container versions that nothing points at.
+#
+# Every nightly Build matrix run republishes all 17 flavors and mints
+# ~144 brand-new versions (see the header of
+# .github/scripts/prune-ghcr-versions.py for the full accounting).
+# Nothing has ever pruned them, so the package grows without bound —
+# which is what trips build-admin-stats.py's paging guard and silently
+# drops the GHCR half of the admin page.
+#
+# This is dispatch-only and DRY RUN BY DEFAULT. Deleting registry
+# versions is irreversible, so `apply` has to be turned on
+# deliberately, per run. There is intentionally no cron: once a couple
+# of applied runs have shown the candidate set is what we expect, add
+# a schedule here — don't start with one.
+#
+# The script does NOT use the usual "delete untagged versions" recipe,
+# which would break these images: the image and provenance manifests
+# inside today's live per-arch index are untagged. It walks the
+# registry from every live tag and keeps whatever is reachable. See
+# the script's SAFETY RAILS section.
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Actually delete (unchecked = dry run)'
+        type: boolean
+        default: false
+      grace_days:
+        description: 'Never delete versions younger than this many days'
+        type: string
+        default: '14'
+      limit:
+        description: 'Cap deletions this run (0 = no cap)'
+        type: string
+        default: '0'
+      max_delete:
+        description: 'Refuse the run if more than this many candidates'
+        type: string
+        default: '20000'
+
+permissions:
+  contents: read
+  # `packages: write` is what allows DELETE on a package version.
+  # A dry run only needs read, but the job is one workflow either way
+  # and the script will not delete without --apply.
+  packages: write
+
+# Never let two prunes overlap: the second would walk a registry the
+# first is actively mutating.
+concurrency:
+  group: prune-ghcr
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Prune
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          args=(
+            --grace-days "${{ inputs.grace_days }}"
+            --limit      "${{ inputs.limit }}"
+            --max-delete "${{ inputs.max_delete }}"
+          )
+          if [ "${{ inputs.apply }}" = "true" ]; then
+            echo "::warning::Running with --apply: versions will be DELETED."
+            args+=(--apply)
+          else
+            echo "Dry run (no --apply); nothing will be deleted."
+          fi
+          python3 .github/scripts/prune-ghcr-versions.py "${args[@]}"

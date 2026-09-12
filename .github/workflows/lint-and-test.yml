@@ -51,7 +51,8 @@ jobs:
             .github/scripts/build-pages-data.py \
             .github/scripts/build-admin-stats.py \
             .github/scripts/build-badges.py \
-            .github/scripts/scaffold-new-qiskit.py
+            .github/scripts/scaffold-new-qiskit.py \
+            .github/scripts/prune-ghcr-versions.py
 
       - name: Syntax-check site JS
         run: |
