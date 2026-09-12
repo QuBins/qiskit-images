@@ -21,6 +21,16 @@ fails CI instead of quietly eating the registry:
      it carries a tag — otherwise signatures pin themselves forever.
   5. Dry run is the default and deletes nothing.
   6. The --max-delete floor refuses an oversized pass (exit 2).
+  7. Digests are read case-insensitively and verified against the
+     bytes. The first dry run (2026-09-12, run 34713900112) found 0
+     reachable digests from 55 live tags because `dict(resp.headers)`
+     froze header casing and GHCR sends `docker-content-digest` in
+     lower case. The original tests missed it by mocking
+     fetch_manifest -- the very layer that was broken -- so these
+     drive the real parser through a fake HTTP response instead.
+  8. Incoherent reachability refuses to delete (exit 2): zero
+     reachable digests despite live tags, or any live tag that will
+     not resolve. A GC must never act on an incomplete picture.
 """
 from __future__ import annotations
 
@@ -63,12 +73,18 @@ _REG = {
     "sha256:amd_img": {}, "sha256:amd_att": {},
     "sha256:arm_img": {}, "sha256:arm_att": {},
     "sha256-par_idx.sig": {}, "sha256:livesig": {},
+    # A stray human tag. It is a LIVE tag, so walking it makes its
+    # digest reachable -- which is the point: any resolvable tag
+    # protects its target through rule 1, and a tag that does NOT
+    # resolve trips the coherence gate rather than being ignored.
+    "experiment-do-not-delete": {}, "sha256:manual": {},
 }
 _TAG2DIG = {
     "2.5-xl": "sha256:par_idx",
     "2.5-xl-amd64": "sha256:amd_idx",
     "2.5-xl-arm64": "sha256:arm_idx",
     "sha256-par_idx.sig": "sha256:livesig",
+    "experiment-do-not-delete": "sha256:manual",
 }
 
 LIVE_UNTAGGED_CHILDREN = {4, 5, 6, 7}
@@ -158,7 +174,7 @@ class PruneSafetyTests(unittest.TestCase):
         self._run("--grace-days", "1", "--apply")
         self.assertIn(20, self.deleted)
 
-    def test_stray_tag_on_unreachable_digest_is_kept(self):
+    def test_stray_human_tag_is_kept(self):
         self._run("--grace-days", "14", "--apply")
         self.assertNotIn(24, self.deleted)
 
@@ -173,6 +189,93 @@ class PruneSafetyTests(unittest.TestCase):
     def test_limit_caps_a_single_pass(self):
         self._run("--grace-days", "14", "--apply", "--limit", "1")
         self.assertEqual(len(self.deleted), 1)
+
+
+class DigestParsingTests(unittest.TestCase):
+    """Drive the real fetch_manifest through a fake HTTP response.
+
+    These mock at the transport, not at fetch_manifest, because
+    mocking fetch_manifest is what hid the header-casing bug.
+    """
+
+    def setUp(self):
+        self.mod = _load()
+
+    def _install_response(self, body: bytes, headers: dict[str, str]):
+        import email.message
+
+        msg = email.message.Message()
+        for k, v in headers.items():
+            msg[k] = v
+
+        class _Resp:
+            def __enter__(self_inner):
+                return self_inner
+
+            def __exit__(self_inner, *a):
+                return False
+
+            def read(self_inner):
+                return body
+
+            headers = msg
+
+        self.mod._OPENER = type("O", (), {"open": staticmethod(lambda req, timeout=None: _Resp())})()
+
+    def test_digest_read_from_lowercase_header(self):
+        body = b'{"schemaVersion":2,"manifests":[]}'
+        want = "sha256:" + __import__("hashlib").sha256(body).hexdigest()
+        # GHCR's actual casing
+        self._install_response(body, {"docker-content-digest": want})
+        _doc, digest = self.mod.fetch_manifest("tok", "2.5-xl")
+        self.assertEqual(digest, want)
+
+    def test_digest_read_from_titlecase_header(self):
+        body = b'{"schemaVersion":2,"manifests":[]}'
+        want = "sha256:" + __import__("hashlib").sha256(body).hexdigest()
+        self._install_response(body, {"Docker-Content-Digest": want})
+        _doc, digest = self.mod.fetch_manifest("tok", "2.5-xl")
+        self.assertEqual(digest, want)
+
+    def test_digest_computed_when_header_absent(self):
+        body = b'{"schemaVersion":2,"manifests":[]}'
+        want = "sha256:" + __import__("hashlib").sha256(body).hexdigest()
+        self._install_response(body, {})
+        _doc, digest = self.mod.fetch_manifest("tok", "2.5-xl")
+        self.assertEqual(digest, want)
+
+    def test_digest_mismatch_is_fatal(self):
+        body = b'{"schemaVersion":2,"manifests":[]}'
+        self._install_response(body, {"docker-content-digest": "sha256:" + "0" * 64})
+        with self.assertRaises(RuntimeError):
+            self.mod.fetch_manifest("tok", "2.5-xl")
+
+
+class CoherenceGateTests(unittest.TestCase):
+    """Refuse to delete when the reachability picture is not trustworthy."""
+
+    def setUp(self):
+        self.mod = _load()
+        self.deleted: list[int] = []
+        self.mod.registry_token = lambda: "tok"
+        self.mod.list_versions = lambda tok: _versions()
+        self.mod.delete_version = lambda tok, vid: self.deleted.append(vid)
+        os.environ["GITHUB_TOKEN"] = "x"
+
+    def _run(self, *argv):
+        sys.argv = ["prune", *argv]
+        return self.mod.main()
+
+    def test_zero_reachable_refuses(self):
+        """The exact production failure: walk returns nothing."""
+        self.mod.walk_reachable = lambda tok, tags: (set(), [])
+        self.assertEqual(self._run("--grace-days", "14", "--apply"), 2)
+        self.assertEqual(self.deleted, [])
+
+    def test_unresolved_tag_refuses(self):
+        self.mod.walk_reachable = lambda tok, tags: ({"sha256:par_idx"}, ["2.5-xl-arm64"])
+        self.assertEqual(self._run("--grace-days", "14", "--apply"), 2)
+        self.assertEqual(self.deleted, [])
 
 
 if __name__ == "__main__":

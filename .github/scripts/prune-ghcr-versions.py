@@ -68,6 +68,7 @@ Exit codes: 0 ok, 1 error, 2 refused (floor tripped).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -130,7 +131,15 @@ def _get(url: str, headers: dict[str, str], *, tries: int = 3) -> tuple[bytes, d
         req = urllib.request.Request(url, headers=headers)
         try:
             with _OPENER.open(req, timeout=30) as resp:
-                return resp.read(), dict(resp.headers)
+                # Lowercase the keys. HTTP header names are
+                # case-insensitive and `resp.headers` (an
+                # email.message.Message) honours that, but
+                # `dict(resp.headers)` does NOT -- it freezes whatever
+                # case the server happened to send. GHCR sends
+                # `docker-content-digest` in lower case, so a lookup
+                # for the conventional `Docker-Content-Digest` silently
+                # returned None and every digest went unrecorded.
+                return resp.read(), {k.lower(): v for k, v in resp.headers.items()}
         except urllib.error.HTTPError as e:
             if e.code == 404 or 400 <= e.code < 500:
                 raise
@@ -226,10 +235,21 @@ def fetch_manifest(tok: str, ref: str) -> tuple[dict | None, str | None]:
         if e.code == 404:
             return None, None
         raise
-    return json.loads(body), hdrs.get("Docker-Content-Digest")
+    # A manifest's digest is by definition sha256 over its exact
+    # bytes, so compute it rather than trusting the header to be
+    # present. The header is used when offered and verified against
+    # the computed value; a mismatch means we are not looking at what
+    # we think we are, and a GC must not act on that.
+    computed = "sha256:" + hashlib.sha256(body).hexdigest()
+    advertised = hdrs.get("docker-content-digest")
+    if advertised and advertised != computed:
+        raise RuntimeError(
+            f"digest mismatch for {ref}: header {advertised} != computed {computed}"
+        )
+    return json.loads(body), computed
 
 
-def walk_reachable(tok: str, tags: list[str]) -> set[str]:
+def walk_reachable(tok: str, tags: list[str]) -> tuple[set[str], list[str]]:
     """Every digest reachable from the given tags.
 
     Follows index -> manifests, plus the `subject` back-reference used
@@ -238,11 +258,18 @@ def walk_reachable(tok: str, tags: list[str]) -> set[str]:
     digests matter here.
     """
     seen: set[str] = set()
+    unresolved: list[str] = []
+    top = set(tags)
     queue: list[str] = list(tags)
     while queue:
         ref = queue.pop()
         doc, digest = fetch_manifest(tok, ref)
         if doc is None:
+            # A top-level tag that will not resolve means our picture
+            # of what is live is incomplete. Record it; main() refuses
+            # to delete on an incomplete picture.
+            if ref in top:
+                unresolved.append(ref)
             continue
         if digest:
             if digest in seen:
@@ -255,7 +282,7 @@ def walk_reachable(tok: str, tags: list[str]) -> set[str]:
         subj = (doc.get("subject") or {}).get("digest")
         if subj and subj not in seen:
             queue.append(subj)
-    return seen
+    return seen, unresolved
 
 
 # ------------------------------------------------------------------ main
@@ -307,8 +334,32 @@ def main() -> int:
     print(f"  {len(real_tags)} real tags, {len(sig_tags)} cosign signature tags")
 
     print("Walking reachability from live tags ...")
-    reachable = walk_reachable(registry_token(), real_tags)
+    reachable, unresolved = walk_reachable(registry_token(), real_tags)
     print(f"  {len(reachable)} digests reachable from live tags")
+
+    # Coherence gate. Reachability is the rail that keeps this from
+    # behaving like "delete every untagged version", which here would
+    # delete the live children of every per-arch index. If the walk
+    # did not actually work, we must not fall through to deleting on
+    # a degraded picture -- which is exactly what happened on the
+    # first dry run (2026-09-12, run 34713900112): a case-sensitive
+    # header lookup meant 0 digests were recorded from 55 live tags,
+    # and 13131 versions were listed as candidates with the rail
+    # silently dead. Refuse instead.
+    if real_tags and not reachable:
+        print("\nREFUSING: walked ${n} live tags and found 0 reachable digests."
+              .replace("${n}", str(len(real_tags))), file=sys.stderr)
+        print("The reachability walk is not working; deleting now would "
+              "treat live images as garbage.", file=sys.stderr)
+        return 2
+    if unresolved:
+        print(f"\nREFUSING: {len(unresolved)} live tag(s) did not resolve, so the "
+              f"set of reachable digests is incomplete:", file=sys.stderr)
+        for t in unresolved[:10]:
+            print(f"  {t}", file=sys.stderr)
+        print("A GC must not delete on an incomplete picture. Re-run once the "
+              "registry answers for every tag.", file=sys.stderr)
+        return 2
 
     # A cosign signature's subject is encoded in its tag:
     #   sha256-<hex>.sig  ->  sha256:<hex>
