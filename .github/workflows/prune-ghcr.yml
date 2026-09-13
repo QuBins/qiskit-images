@@ -31,7 +31,7 @@ on:
       grace_days:
         description: 'Never delete versions younger than this many days'
         type: string
-        default: '14'
+        default: '3'
       limit:
         description: 'Cap deletions this run (0 = no cap)'
         type: string

@@ -57,7 +57,14 @@ SAFETY RAILS (in order of application)
     always kept.
  4. Grace period. Nothing younger than --grace-days is ever deleted,
     so an in-flight publish (children pushed, index not yet created)
-    cannot be collected mid-run.
+    cannot be collected mid-run. Default 3 days: a publish takes ~20
+    minutes, so this is a ~200x margin for that job. The window is
+    also, in practice, the rollback horizon for anyone pinning an
+    UNREFERENCED digest -- live tags are protected by reachability
+    regardless of age, so this only bounds how far back a digest that
+    nothing points at stays resolvable. It is what sets the package's
+    steady-state size: ~144 new versions a night means roughly
+    grace_days x 144 versions retained on top of the live set.
  5. Floor. Refuse to run if it would delete more than --max-delete
     versions in one pass, so a bug in reachability cannot cascade.
  6. Dry run by default. --apply is required to delete anything.
@@ -302,7 +309,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--apply", action="store_true",
                     help="actually delete; default is a dry run")
-    ap.add_argument("--grace-days", type=float, default=14.0,
+    ap.add_argument("--grace-days", type=float, default=3.0,
                     help="never delete anything younger than this")
     ap.add_argument("--max-delete", type=int, default=20000,
                     help="refuse the run if more than this many would go")
