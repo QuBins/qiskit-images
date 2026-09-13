@@ -198,14 +198,64 @@ def list_versions(token: str) -> list[dict]:
     return out
 
 
-def delete_version(token: str, version_id: int) -> None:
+class RateLimited(Exception):
+    """Raised when the API is refusing writes and waiting is not worth it."""
+
+
+def delete_version(token: str, version_id: int, *, budget: list[float]) -> None:
+    """Delete one version, waiting out a rate limit if it is short.
+
+    GitHub answers a secondary rate limit with **403**, not 429, and
+    without a Retry-After in some cases -- so a 403 here is usually
+    "slow down", not "forbidden". On the first full pass (2026-09-13,
+    run 34742398684) 7058 deletions succeeded and then 7076 straight
+    403s followed for 11 minutes, and because every failure was merely
+    logged the run still exited 0 reporting "Deleted 7058/14134". A
+    scheduled prune must not look successful after doing half its job.
+
+    `budget` is a single-element list holding the seconds of waiting
+    still allowed across the whole run, so one stalled pass cannot sit
+    burning a 6h job slot. When it runs out we raise RateLimited and
+    main() stops deleting and exits non-zero with the remainder
+    reported -- the next run picks up where this one left off, since
+    the candidate set is recomputed from scratch every time.
+    """
     url = (
         f"{GH_API}/orgs/{GH_ORG}/packages/container/{GH_PACKAGE}"
         f"/versions/{version_id}"
     )
-    req = urllib.request.Request(url, headers=gh_headers(token), method="DELETE")
-    with _OPENER.open(req, timeout=30) as resp:
-        resp.read()
+    for attempt in range(1, 5):
+        req = urllib.request.Request(url, headers=gh_headers(token), method="DELETE")
+        try:
+            with _OPENER.open(req, timeout=30) as resp:
+                resp.read()
+            return
+        except urllib.error.HTTPError as e:
+            if e.code not in (403, 429):
+                raise
+            hdrs = {k.lower(): v for k, v in (e.headers or {}).items()}
+            wait = 0.0
+            if hdrs.get("retry-after"):
+                try:
+                    wait = float(hdrs["retry-after"])
+                except ValueError:
+                    wait = 60.0
+            elif hdrs.get("x-ratelimit-remaining") == "0" and hdrs.get("x-ratelimit-reset"):
+                try:
+                    wait = max(0.0, float(hdrs["x-ratelimit-reset"]) - time.time())
+                except ValueError:
+                    wait = 60.0
+            else:
+                wait = 30.0 * attempt
+            if wait > budget[0]:
+                raise RateLimited(
+                    f"rate limited; next wait {wait:.0f}s exceeds remaining "
+                    f"budget {budget[0]:.0f}s"
+                )
+            print(f"  rate limited, waiting {wait:.0f}s ...", flush=True)
+            time.sleep(wait)
+            budget[0] -= wait
+    raise RateLimited("still rate limited after 4 attempts")
 
 
 # -------------------------------------------------------------- registry
@@ -315,6 +365,9 @@ def main() -> int:
                     help="refuse the run if more than this many would go")
     ap.add_argument("--limit", type=int, default=0,
                     help="cap deletions this pass (0 = no cap)")
+    ap.add_argument("--wait-budget", type=float, default=600.0,
+                    help="total seconds this run may spend waiting out "
+                         "rate limits before stopping and reporting")
     args = ap.parse_args()
 
     token = os.environ.get("GITHUB_TOKEN", "")
@@ -433,15 +486,33 @@ def main() -> int:
         return 0
 
     batch = candidates if args.limit <= 0 else candidates[: args.limit]
-    print(f"\nDeleting {len(batch)} versions ...")
+    print(f"\nDeleting {len(batch)} versions ...", flush=True)
+    budget = [float(args.wait_budget)]
     done = 0
+    failed = 0
+    stopped = ""
     for v, _tl, _age in batch:
         try:
-            delete_version(token, int(v["id"]))
+            delete_version(token, int(v["id"]), budget=budget)
             done += 1
-        except Exception as e:  # keep going; report at the end
-            print(f"  failed id={v.get('id')}: {e}", file=sys.stderr)
+        except RateLimited as e:
+            stopped = str(e)
+            break
+        except Exception as e:  # unexpected: report and keep going
+            failed += 1
+            if failed <= 20:
+                print(f"  failed id={v.get('id')}: {e}", file=sys.stderr)
+    remaining = len(batch) - done
     print(f"Deleted {done}/{len(batch)}.")
+    if stopped:
+        print(f"Stopped early: {stopped}", file=sys.stderr)
+    if remaining:
+        # Non-zero so a scheduled run does not read as fully successful
+        # while leaving thousands of candidates behind. Re-running
+        # resumes: the candidate set is recomputed each time.
+        print(f"{remaining} candidate(s) not deleted; re-run to continue.",
+              file=sys.stderr)
+        return 1
     return 0
 
 

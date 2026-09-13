@@ -133,7 +133,7 @@ class PruneSafetyTests(unittest.TestCase):
         self.mod.registry_token = lambda: "tok"
         self.mod.fetch_manifest = self._fetch
         self.mod.list_versions = lambda tok: _versions()
-        self.mod.delete_version = lambda tok, vid: self.deleted.append(vid)
+        self.mod.delete_version = lambda tok, vid, **kw: self.deleted.append(vid)
         os.environ["GITHUB_TOKEN"] = "x"
 
     @staticmethod
@@ -189,6 +189,81 @@ class PruneSafetyTests(unittest.TestCase):
     def test_limit_caps_a_single_pass(self):
         self._run("--grace-days", "14", "--apply", "--limit", "1")
         self.assertEqual(len(self.deleted), 1)
+
+
+class RateLimitTests(unittest.TestCase):
+    """A rate-limited pass must not report success.
+
+    On the first full pass (2026-09-13, run 34742398684) 7058 of 14134
+    deletions succeeded, 7076 returned 403, and the run still exited 0
+    -- a scheduled prune would have looked healthy while leaving half
+    the work undone.
+    """
+
+    def setUp(self):
+        self.mod = _load()
+        self.deleted: list[int] = []
+        self.mod.registry_token = lambda: "tok"
+        self.mod.list_versions = lambda tok: _versions()
+        self.mod.walk_reachable = lambda tok, tags: ({"sha256:par_idx"}, [])
+        os.environ["GITHUB_TOKEN"] = "x"
+
+    def _run(self, *argv):
+        sys.argv = ["prune", *argv]
+        return self.mod.main()
+
+    def test_incomplete_pass_exits_nonzero(self):
+        def only_first(tok, vid, **kw):
+            if self.deleted:
+                raise self.mod.RateLimited("rate limited")
+            self.deleted.append(vid)
+        self.mod.delete_version = only_first
+        self.assertEqual(self._run("--grace-days", "14", "--apply"), 1)
+        self.assertEqual(len(self.deleted), 1)
+
+    def test_complete_pass_exits_zero(self):
+        self.mod.delete_version = lambda tok, vid, **kw: self.deleted.append(vid)
+        self.assertEqual(self._run("--grace-days", "14", "--apply"), 0)
+
+    def test_403_is_waited_out_then_succeeds(self):
+        import urllib.error
+
+        calls = {"n": 0}
+        real = self.mod.delete_version
+        slept: list[float] = []
+        self.mod.time = type("T", (), {"sleep": staticmethod(lambda s: slept.append(s)),
+                                       "time": staticmethod(lambda: 0.0)})()
+
+        class _Op:
+            @staticmethod
+            def open(req, timeout=None):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    raise urllib.error.HTTPError(
+                        req.full_url, 403, "Forbidden", {"Retry-After": "7"}, None)
+                class R:
+                    def __enter__(s): return s
+                    def __exit__(s, *a): return False
+                    def read(s): return b""
+                return R()
+
+        self.mod._OPENER = _Op()
+        real("tok", 123, budget=[600.0])
+        self.assertEqual(calls["n"], 2)
+        self.assertEqual(slept, [7.0])
+
+    def test_403_beyond_budget_raises(self):
+        import urllib.error
+
+        class _Op:
+            @staticmethod
+            def open(req, timeout=None):
+                raise urllib.error.HTTPError(
+                    req.full_url, 403, "Forbidden", {"Retry-After": "3600"}, None)
+
+        self.mod._OPENER = _Op()
+        with self.assertRaises(self.mod.RateLimited):
+            self.mod.delete_version("tok", 123, budget=[60.0])
 
 
 class DigestParsingTests(unittest.TestCase):
@@ -259,7 +334,7 @@ class CoherenceGateTests(unittest.TestCase):
         self.deleted: list[int] = []
         self.mod.registry_token = lambda: "tok"
         self.mod.list_versions = lambda tok: _versions()
-        self.mod.delete_version = lambda tok, vid: self.deleted.append(vid)
+        self.mod.delete_version = lambda tok, vid, **kw: self.deleted.append(vid)
         os.environ["GITHUB_TOKEN"] = "x"
 
     def _run(self, *argv):
