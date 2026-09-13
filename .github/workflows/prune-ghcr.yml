@@ -15,6 +15,13 @@ name: Prune GHCR versions
 # of applied runs have shown the candidate set is what we expect, add
 # a schedule here — don't start with one.
 #
+# GitHub caps deletions at roughly 7000/hour and answers the cap with
+# 403. The script waits a limit out, bounded by --wait-budget, and
+# exits non-zero with the remainder if it cannot finish. Raising
+# wait_budget past the reset interval (~3600s) lets a single run sit
+# through the window and continue rather than needing to be
+# re-dispatched by hand -- at the cost of a job that mostly sleeps.
+#
 # The script does NOT use the usual "delete untagged versions" recipe,
 # which would break these images: the image and provenance manifests
 # inside today's live per-arch index are untagged. It walks the
@@ -40,6 +47,10 @@ on:
         description: 'Refuse the run if more than this many candidates'
         type: string
         default: '20000'
+      wait_budget:
+        description: 'Seconds this run may spend waiting out rate limits'
+        type: string
+        default: '600'
 
 permissions:
   contents: read
@@ -70,9 +81,10 @@ jobs:
         run: |
           set -euo pipefail
           args=(
-            --grace-days "${{ inputs.grace_days }}"
-            --limit      "${{ inputs.limit }}"
-            --max-delete "${{ inputs.max_delete }}"
+            --grace-days  "${{ inputs.grace_days }}"
+            --limit       "${{ inputs.limit }}"
+            --max-delete  "${{ inputs.max_delete }}"
+            --wait-budget "${{ inputs.wait_budget }}"
           )
           if [ "${{ inputs.apply }}" = "true" ]; then
             echo "::warning::Running with --apply: versions will be DELETED."
