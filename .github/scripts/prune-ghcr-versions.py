@@ -387,8 +387,25 @@ def main() -> int:
         else:
             candidates.append((v, tl, age))
 
+    # Break the keep set down by rule. A dry run exists to be
+    # reviewed, and "KEEP 3895" on its own does not let anyone judge
+    # whether the split is sensible -- the interesting question is
+    # always which rail is holding what, e.g. how much is live vs
+    # merely inside the grace window vs pinned by a tag.
+    reasons: dict[str, int] = {}
+    sig_kept = 0
+    for v, why in keep:
+        reasons[why] = reasons.get(why, 0) + 1
+        tl = tags_by_digest.get(v.get("name") or "") or []
+        if any(t.startswith("sha256-") and t.endswith(".sig") for t in tl):
+            sig_kept += 1
+
     print()
     print(f"KEEP      {len(keep)}")
+    for why in ("reachable", "within grace", "tagged"):
+        if reasons.get(why):
+            print(f"  {reasons[why]:6d}  {why}")
+    print(f"  ({sig_kept} of the kept versions are cosign .sig tags)")
     print(f"CANDIDATE {len(candidates)}  (unreachable, untagged-or-orphan-sig, "
           f"older than {args.grace_days:g}d)")
 
