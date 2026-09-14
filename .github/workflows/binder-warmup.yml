@@ -195,13 +195,22 @@ jobs:
         # bytes still arriving (`timed out after 300002 ms with 17069
         # bytes received`), not a hung connection.
         #
-        # So: 600s for xl (double the old cap, ~2.2x the slowest warm we
-        # have ever confirmed), 300s kept for small, which has never
-        # needed more than 126s. This only extends how long we are
-        # willing to *watch*; it does not make mybinder do more work.
-        # Worst case the job grows from ~40min to ~65min if every target
-        # times out, against a ~12min median today — fine for a 12-hourly
-        # best-effort job, and well inside the 360min default job cap.
+        # So xl got 600s (#136), small kept 300s, which has never needed
+        # more than 126s.
+        #
+        # 600s then proved too tight for the slowest target. 275s was the
+        # slowest warm we could *see* under the 300s cap, which censored
+        # the tail; with the cap lifted, 2.1-xl came in at 550s (manual
+        # run, 2026-09-11), 375s (09-13) and then timed out at 600s
+        # (09-14). The 09-13 run is also the clearest evidence the lift
+        # works at all: 2.5-xl, 2.1-xl and 2.1-xl-rise each took 375s,
+        # three warms the old cap would have discarded. Raised to 900s.
+        #
+        # This only extends how long we are willing to *watch*; it does
+        # not make mybinder do more work. Worst case, every target timing
+        # out, is 3x300s + 5x900s + pacing, about 90min, against a median
+        # well under 15min — fine for a 12-hourly best-effort job and well
+        # inside the 360min default job cap.
         #
         # 10s pacing between targets to be polite to a shared
         # community service.
@@ -222,7 +231,7 @@ jobs:
             local max_time
             case "${target}" in
               *small*) max_time=300 ;;
-              *)       max_time=600 ;;
+              *)       max_time=900 ;;
             esac
             echo "::group::Warming ${target} (budget ${max_time}s)"
             echo "GET ${url}"
