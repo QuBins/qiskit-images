@@ -252,6 +252,35 @@ class RateLimitTests(unittest.TestCase):
         self.assertEqual(calls["n"], 2)
         self.assertEqual(slept, [7.0])
 
+    def test_403_past_reset_waits_a_floor_not_zero(self):
+        """Pass 4 regression: a reset already in the past must not
+        collapse every retry to a 0s wait."""
+        import urllib.error
+
+        calls = {"n": 0}
+        slept: list[float] = []
+        self.mod.time = type("T", (), {"sleep": staticmethod(lambda s: slept.append(s)),
+                                       "time": staticmethod(lambda: 1000.0)})()
+
+        class _Op:
+            @staticmethod
+            def open(req, timeout=None):
+                calls["n"] += 1
+                if calls["n"] <= 2:
+                    raise urllib.error.HTTPError(
+                        req.full_url, 403, "Forbidden",
+                        {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "900"}, None)
+                class R:
+                    def __enter__(s): return s
+                    def __exit__(s, *a): return False
+                    def read(s): return b""
+                return R()
+
+        self.mod._OPENER = _Op()
+        self.mod.delete_version("tok", 123, budget=[600.0])
+        self.assertEqual(calls["n"], 3)
+        self.assertEqual(slept, [60.0, 120.0])
+
     def test_403_beyond_budget_raises(self):
         import urllib.error
 
