@@ -241,10 +241,19 @@ def delete_version(token: str, version_id: int, *, budget: list[float]) -> None:
                 except ValueError:
                     wait = 60.0
             elif hdrs.get("x-ratelimit-remaining") == "0" and hdrs.get("x-ratelimit-reset"):
+                # Floor the wait, escalating per attempt. Once the reset
+                # time has passed, `reset - now` is <= 0, but GitHub can
+                # keep answering 403 (the secondary limit outlives the
+                # primary window). Without a floor every retry waited 0s
+                # and all four attempts burned in the same second: pass 4
+                # (2026-09-13, run 34747993209) waited out a 1289s reset
+                # correctly, then logged "waiting 0s" three times and
+                # stopped having deleted 0 of 1592.
                 try:
-                    wait = max(0.0, float(hdrs["x-ratelimit-reset"]) - time.time())
+                    wait = max(60.0 * attempt,
+                               float(hdrs["x-ratelimit-reset"]) - time.time())
                 except ValueError:
-                    wait = 60.0
+                    wait = 60.0 * attempt
             else:
                 wait = 30.0 * attempt
             if wait > budget[0]:
