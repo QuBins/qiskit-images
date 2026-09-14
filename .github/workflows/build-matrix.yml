@@ -788,7 +788,29 @@ jobs:
             printf 'FROM %s\n' "$image" > binder/Dockerfile
             git add binder/Dockerfile
             git commit -m "Sync stub branch for $branch"
-            git push -f origin "$branch"
+            # Retry the push. On 2026-09-13 (run 34748081224) GitHub
+            # rejected three of these concurrent force-pushes server-side
+            #   remote: fatal error in commit_refs
+            #   ! [remote rejected] 2.5-small -> 2.5-small (failure)
+            # failing manifest 2.0-xl, 2.5-small and 2.5-xxl after every
+            # build, sign and verify step had already succeeded. The
+            # images were published; only those mybinder stub branches
+            # went a day stale. A transient ref-update failure on
+            # GitHub's side, so a short linear backoff is the fix. The
+            # push is a force-push of a single-commit orphan branch, so
+            # re-running it is idempotent.
+            local attempt
+            for attempt in 1 2 3; do
+              if git push -f origin "$branch"; then
+                return 0
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                echo "::warning::push of stub branch $branch failed (attempt $attempt); retrying in $((attempt * 10))s"
+                sleep $((attempt * 10))
+              fi
+            done
+            echo "::error::push of stub branch $branch failed after 3 attempts"
+            return 1
           }
 
           REPO="ghcr.io/${OWNER_LC}/${IMAGE}"
