@@ -9,11 +9,23 @@ name: Prune GHCR versions
 # which is what trips build-admin-stats.py's paging guard and silently
 # drops the GHCR half of the admin page.
 #
-# This is dispatch-only and DRY RUN BY DEFAULT. Deleting registry
-# versions is irreversible, so `apply` has to be turned on
-# deliberately, per run. There is intentionally no cron: once a couple
-# of applied runs have shown the candidate set is what we expect, add
-# a schedule here — don't start with one.
+# Manual runs are DRY RUN BY DEFAULT: deleting registry versions is
+# irreversible, so `apply` has to be turned on deliberately per run.
+# The daily cron below is the exception — it applies, because that is
+# the whole point of a scheduled GC.
+#
+# The schedule was added only after the one-off cleanup proved the
+# candidate set is what we expect: six applied passes on 2026-09-13/14
+# took the package from 17026 versions to ~470 with every live tag and
+# all 84 of their child manifests still resolving at each step. Without
+# a cron the growth simply comes back — 470 -> 1102 in the four days
+# after that cleanup, ~158/night, which crosses the 5000-version mark
+# that breaks build-admin-stats.py's paging in about three weeks.
+#
+# A daily pass has only ~150 candidates, far below the ~7000/hour
+# deletion cap, so it should finish in one run. If it ever cannot, the
+# script exits non-zero and the scheduled run shows up as failed rather
+# than silently doing half the job (#141).
 #
 # GitHub caps deletions at roughly 7000/hour and answers the cap with
 # 403. The script waits a limit out, bounded by --wait-budget, and
@@ -29,6 +41,12 @@ name: Prune GHCR versions
 # the script's SAFETY RAILS section.
 
 on:
+  # 12:00 UTC: clear of the nightly Build matrix publish window and of
+  # the 04:00/16:00 warm-up slots, so a prune never races a publish.
+  # (Racing one would be safe anyway — the grace window protects
+  # anything newer than 3 days — but staying clear keeps logs readable.)
+  schedule:
+    - cron: '0 12 * * *'
   workflow_dispatch:
     inputs:
       apply:
@@ -80,13 +98,25 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # `inputs.*` is empty on a schedule event, so every value needs
+          # a fallback here rather than relying on the input defaults
+          # above (those only apply to workflow_dispatch). The scheduled
+          # run is the applying one, and it gets a wait budget large
+          # enough to sit through a rate-limit reset (~3600s) instead of
+          # the 600s a manual run defaults to.
+          GRACE='${{ inputs.grace_days  || '3' }}'
+          LIMIT='${{ inputs.limit       || '0' }}'
+          MAXDEL='${{ inputs.max_delete || '20000' }}'
+          WAIT='${{ inputs.wait_budget  || '3000' }}'
+          APPLY='${{ github.event_name == 'schedule' && 'true' || inputs.apply }}'
+          echo "event=${{ github.event_name }} apply=${APPLY} grace_days=${GRACE} limit=${LIMIT} max_delete=${MAXDEL} wait_budget=${WAIT}"
           args=(
-            --grace-days  "${{ inputs.grace_days }}"
-            --limit       "${{ inputs.limit }}"
-            --max-delete  "${{ inputs.max_delete }}"
-            --wait-budget "${{ inputs.wait_budget }}"
+            --grace-days  "${GRACE}"
+            --limit       "${LIMIT}"
+            --max-delete  "${MAXDEL}"
+            --wait-budget "${WAIT}"
           )
-          if [ "${{ inputs.apply }}" = "true" ]; then
+          if [ "${APPLY}" = "true" ]; then
             echo "::warning::Running with --apply: versions will be DELETED."
             args+=(--apply)
           else
