@@ -32,7 +32,7 @@ RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl || "${QISK
 # (a single ~250-byte text file) and the layer cache gets keyed on
 # ${QISKIT_VERSION} via the next RUN anyway.
 COPY versions /tmp/versions
-# Six in-image security upgrades, all for findings the base digest
+# Seven in-image security upgrades, all for findings the base digest
 # 9388739d still ships and that have an available fix (so Trivy's
 # --ignore-unfixed gate flags them on every flavor):
 #
@@ -69,6 +69,19 @@ COPY versions /tmp/versions
 #    incl. -small -- which is why it belongs here and not in
 #    versions/_xl-base.txt. Failed the whole 2026-09-03 nightly matrix
 #    (run 33732898839: all 34 build jobs). Added 2026-09-03.
+#  - anyio: CVE-2026-63374 (CRITICAL), base conda env ships 4.13.0,
+#    fixed in 4.14.2. TLSStream encoded host names with IDNA 2003,
+#    which allows TLS certificate spoofing. anyio is a base/transitive
+#    package (no requirements.txt pin) pulled in by httpx / httpcore /
+#    starlette / jupyter-server / watchfiles; every cap is either
+#    open-ended or `anyio<5`, so the floor stays in range for all of
+#    them. A base-layer finding -- confirmed identical in -small and
+#    -xl scans -- so it belongs here rather than in
+#    versions/_xl-base.txt, which would miss the six -small flavors.
+#    Floored at the fix version rather than the current 4.15.1 to keep
+#    the change minimal. Failed three whole nightly matrices
+#    (2026-09-19, 09-20, 09-21: all 34 build jobs each), during which
+#    nothing published. Added 2026-09-21.
 #
 # Remove each once the base image ships past the respective fix.
 # Both installs go through a retry wrapper. The xl/xxl wheelsets pull
@@ -94,7 +107,7 @@ RUN pip_retry() { \
       return 1; \
     }; \
     pip_retry -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
- && pip_retry --upgrade 'jupyter-server>=2.20.0' 'msgpack>=1.2.1' 'mistune>=3.3.0' 'jupyterlab>=4.5.10,<4.6' 'cryptography>=50.0.0' 'tornado>=6.5.8' \
+ && pip_retry --upgrade 'jupyter-server>=2.20.0' 'msgpack>=1.2.1' 'mistune>=3.3.0' 'jupyterlab>=4.5.10,<4.6' 'cryptography>=50.0.0' 'tornado>=6.5.8' 'anyio>=4.14.2' \
  && rm -rf /tmp/versions \
  && fix-permissions "${CONDA_DIR}" \
  && fix-permissions "/home/${NB_USER}"
