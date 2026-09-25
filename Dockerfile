@@ -10,18 +10,32 @@ ENV QISKIT_VERSION=${QISKIT_VERSION}
 
 USER root
 
-# xl, xxl, and rise images bundle nbgitpuller (xxl and rise both pull
-# the xl set via `-r ../<minor>-xl/requirements.txt`), which shells out
-# to `git` at runtime to clone the user's notebook repo into the running
-# session. The Jupyter base-notebook image is intentionally minimal and
-# ships without git, so without this step nbgitpuller raises
-# FileNotFoundError on every git-pull URL. small images don't ship
-# nbgitpuller and stay git-less to preserve the "small = small" property.
-# The rise flavor's name ends in `-rise` (not `-xl`), so it needs its own
-# glob here — otherwise it would ship git-less and break nbgitpuller.
+# Two apt packages for the xl/xxl/rise flavors:
+#
+#  - git: these images bundle nbgitpuller (xxl and rise both pull the xl
+#    set via `-r ../<minor>-xl/requirements.txt`), which shells out to
+#    `git` at runtime to clone the user's notebook repo into the running
+#    session. The Jupyter base-notebook image is intentionally minimal
+#    and ships without git, so without this nbgitpuller raises
+#    FileNotFoundError on every git-pull URL.
+#  - graphviz: qiskit's `plot_coupling_map`, `plot_gate_map`,
+#    `dag_drawer` and `pass_manager_drawer` shell out to the graphviz
+#    *binaries*; the python bindings alone are not enough. Without them
+#    they raise `MissingOptionalLibraryError: The 'Graphviz' library is
+#    required`, and rustworkx's own drawers raise "Graphviz could not be
+#    found or run". QuBins#148 measured this against the 283 current
+#    Qiskit docs notebooks run in 2.5-xl: ~16 notebooks hit it, and
+#    adding the binaries fixed 6 outright (the other 10 then failed for
+#    unrelated reasons). ~10 MB, and it is a pure runtime dependency of
+#    code qiskit already ships.
+#
+# small images don't ship nbgitpuller and stay git-less to preserve the
+# "small = small" property, so they get neither. The rise flavor's name
+# ends in `-rise` (not `-xl`), so it needs its own glob here — otherwise
+# it would ship without both and break nbgitpuller.
 RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl || "${QISKIT_VERSION}" == *-rise ]]; then \
       apt-get update \
-      && apt-get install -y --no-install-recommends git \
+      && apt-get install -y --no-install-recommends git graphviz \
       && apt-get clean \
       && rm -rf /var/lib/apt/lists/* ; \
     fi
