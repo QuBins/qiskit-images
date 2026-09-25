@@ -1,6 +1,7 @@
-# Pinned reproducible environment for Qiskit 2.4 (XL flavor).
-# Based on Qiskit-documentation's nb-tester requirements (bumped to qiskit 2.4)
-# plus pylatexenc, pandas, and nbgitpuller for notebook authoring/distribution.
+# Pinned reproducible environment for Qiskit 2.5 (XL flavor).
+# Based on Qiskit-documentation's nb-tester requirements (scripts/nb-tester/
+# requirements.txt) plus pylatexenc, pandas, and nbgitpuller for notebook
+# authoring/distribution.
 #
 # The shared scientific-stack/notebook-tools dependencies (scipy, sklearn,
 # pyscf, plotly, sympy, ffsim, pylatexenc, nbgitpuller, pandas, python-sat,
@@ -14,7 +15,7 @@
 # qiskit-ibm-transpiler is intentionally NOT here: in 0.18 it hard-pulls
 # qiskit-gym -> twisterl -> torch + the full CUDA 13 wheelset (~2.5 GB),
 # which is unconditional (not gated by the [ai-local-mode] extra). To
-# keep xl lean it lives only in the xxl flavor (../2.4-xxl). xl users
+# keep xl lean it lives only in the xxl flavor (../2.5-xxl). xl users
 # who want it can pip install it on demand.
 #
 # gem-suite is amd64-only: Rust extension, sdist only on aarch64, and
@@ -24,23 +25,48 @@
 
 -r ../_xl-base.txt
 
-qiskit[all]~=2.5.0
-# runtime stays at 0.45 because serverless 0.30 caps it at <0.46.0.
-# This set (runtime 0.45 + serverless 0.30 + catalog 0.14) is also the
-# one transpiler 0.18 is consistent with, so the xxl flavor (which adds
-# transpiler on top of this file) resolves without conflict.
-qiskit-ibm-runtime~=0.45.1
+qiskit[all]~=2.5.2
+# The runtime / serverless / catalog trio now tracks upstream's
+# nb-tester set verbatim, because that is what the docs notebooks are
+# actually tested against. Previously xl held runtime at 0.45 so that
+# the xxl flavor -- which chains this file and adds
+# qiskit-ibm-transpiler -- could resolve: transpiler 0.18 requires
+# serverless ~=0.30.
+#
+# That constraint is gone. transpiler 0.18 imports
+# qiskit.synthesis.linear.linear_matrix_utils, which qiskit 2.5
+# removed (it is still present in 2.4), so it cannot work on this
+# minor at all, and 0.18 is the latest release. Upstream reached the
+# same conclusion and has the transpiler line commented out. 2.5-xxl
+# now does too, so nothing chains a conflicting serverless pin and xl
+# is free to follow upstream.
+#
+# Holding runtime at 0.45 cost ~12 of the current docs notebooks,
+# which import Executor, QuantumProgram, NoiseLearner and
+# qiskit_ibm_runtime.circuit -- all added after 0.45 (QuBins#148).
+qiskit-ibm-runtime~=0.47.0
 qiskit-aer~=0.17
-qiskit-serverless~=0.30.0
-# catalog 0.15 demands serverless ~=0.31, but no transpiler release
-# supports serverless 0.31 yet; the latest mutually-consistent set is
-# catalog 0.14 + serverless 0.30 + runtime 0.45 (+ transpiler 0.18 in xxl).
-qiskit-ibm-catalog~=0.14.0
+qiskit-serverless~=0.35.1
+qiskit-ibm-catalog~=0.19.0
 qiskit-addon-sqd~=0.13.1
 qiskit-addon-utils~=0.4.0
-qiskit-addon-mpf~=0.3.0
+# [tenpy] matches upstream: several notebooks import tenpy through mpf.
+# It is x86_64-only here, for the same reason gem-suite is: the extra
+# pulls physics-tenpy, which publishes manylinux wheels for x86_64 but
+# none for aarch64, so pip falls back to the sdist and the build dies on
+#   error: [Errno 2] No such file or directory: 'g++'
+# because the base image ships no C++ toolchain. Adding build-essential
+# to carry one arch would cost far more than the extra is worth.
+# mybinder is amd64-only, so the docs notebooks that need tenpy still
+# get it where they actually run; arm64 keeps mpf without the extra.
+qiskit-addon-mpf[tenpy]~=0.3.0; platform_machine == "x86_64"
+qiskit-addon-mpf~=0.3.0; platform_machine != "x86_64"
 qiskit-addon-aqc-tensor[aer,quimb-jax]~=0.3.1; sys.platform != 'darwin'
 qiskit-addon-obp~=0.3.0
 qiskit-addon-cutting~=0.10.0
+# Upstream pins 0.14.1; 0.14.2 is a patch ahead and stays.
 qiskit-experiments~=0.14.2
-gem-suite; platform_machine == "x86_64"
+# Pinned to upstream's version; the x86_64 marker stays because
+# gem-suite is sdist-only on aarch64 and the base image has no
+# Rust/C++ toolchain.
+gem-suite~=0.2.0; platform_machine == "x86_64"

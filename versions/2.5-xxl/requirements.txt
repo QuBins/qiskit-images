@@ -26,4 +26,21 @@
 
 -r ../2.5-xl/requirements.txt
 
-qiskit-ibm-transpiler[ai-local-mode]~=0.18.0; platform_machine == "x86_64"
+# DISABLED on the 2.5 line, mirroring upstream's nb-tester requirements
+# which carry the same line commented out.
+#
+# Two independent blockers, either one fatal:
+#
+#  1. transpiler 0.18 imports qiskit.synthesis.linear.linear_matrix_utils,
+#     which qiskit 2.5 removed (still present in 2.4). So it cannot even
+#     import on this minor.
+#  2. transpiler 0.18 requires qiskit-serverless ~=0.30, while xl now
+#     follows upstream at serverless 0.35.1.
+#
+# 0.18.0 is the latest release, so there is nothing to bump to. Restore
+# this line once a transpiler release supports qiskit 2.5 *and*
+# serverless 0.35+; until then xxl resolves to the same content as xl.
+# The flavor, its latest-xxl alias and its slot in the matrix are kept
+# so downstream references stay valid and future heavy extras still
+# have a designated home (see the note above).
+#qiskit-ibm-transpiler[ai-local-mode]~=0.18.0; platform_machine == "x86_64"
