@@ -70,3 +70,47 @@ qiskit-experiments~=0.14.2
 # gem-suite is sdist-only on aarch64 and the base image has no
 # Rust/C++ toolchain.
 gem-suite~=0.2.0; platform_machine == "x86_64"
+
+# Packages the current Qiskit docs notebooks import that the image
+# otherwise lacks (QuBins#148 group 3). Every one is a genuine
+# dependency of upstream's nb-tester
+# (Qiskit/documentation scripts/nb-tester/requirements.txt), not a
+# notebook-local `%pip install` -- that distinction was checked
+# package by package, because the sweep harness disables the
+# notebooks' own install cells and would otherwise make self-installed
+# packages look missing.
+#
+# openfermion and dotenv are deliberately NOT here: the notebooks that
+# import them are the two cases absent from upstream's list, so they
+# are almost certainly self-installed.
+#
+# Arch safety: all of these are pure-python wheels except mthree and
+# qiskit-paulice, which publish manylinux wheels for both x86_64 and
+# aarch64. None needs a marker. That was verified against PyPI rather
+# than assumed -- the physics-tenpy sdist broke both arm64 builds
+# earlier on this same line of work.
+qiskit-addon-pna~=0.2.0
+qiskit-addon-slc~=0.1.0
+qiskit-addon-opt-mapper~=0.1.0
+qiskit-basis-constructor~=0.1.0
+qiskit-paulice~=0.2.1
+samplomatic~=0.21.0
+qctrl-visualizer~=11.0.0
+category_encoders~=2.11.1
+imbalanced-learn~=0.14.2
+# mthree is upstream's one package we cannot take. It publishes
+# manylinux wheels for both arches but only up to cp312, with no abi3
+# wheel in any release, and this image is Python 3.13 -- so pip falls
+# back to the sdist and the build dies on a missing g++, on BOTH
+# arches. Upstream can pin it because their test environment is on an
+# older Python. Adding a C++ toolchain to every image for one notebook
+# is the wrong trade, so mthree stays out until it ships cp313 or abi3
+# wheels. (qiskit-paulice looks similar at a glance -- its wheels are
+# tagged cp310 -- but they are cp310-abi3, which is forward-compatible,
+# so it installs fine on 3.13.)
+#
+# Not published on PyPI at all; upstream installs it straight from git
+# at a pinned commit, so this stays reproducible. It needs `git` at
+# build time, which the xl/xxl/rise apt layer already provides.
+# Dependabot cannot track a VCS URL, so bumping it is manual.
+qiskit-device-benchmarking @ git+https://github.com/qiskit-community/qiskit-device-benchmarking.git@aff6064fe5079df572b807b1ee5c9e06ea74fa13
