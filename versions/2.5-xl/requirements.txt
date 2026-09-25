@@ -51,7 +51,16 @@ qiskit-ibm-catalog~=0.19.0
 qiskit-addon-sqd~=0.13.1
 qiskit-addon-utils~=0.4.0
 # [tenpy] matches upstream: several notebooks import tenpy through mpf.
-qiskit-addon-mpf[tenpy]~=0.3.0
+# It is x86_64-only here, for the same reason gem-suite is: the extra
+# pulls physics-tenpy, which publishes manylinux wheels for x86_64 but
+# none for aarch64, so pip falls back to the sdist and the build dies on
+#   error: [Errno 2] No such file or directory: 'g++'
+# because the base image ships no C++ toolchain. Adding build-essential
+# to carry one arch would cost far more than the extra is worth.
+# mybinder is amd64-only, so the docs notebooks that need tenpy still
+# get it where they actually run; arm64 keeps mpf without the extra.
+qiskit-addon-mpf[tenpy]~=0.3.0; platform_machine == "x86_64"
+qiskit-addon-mpf~=0.3.0; platform_machine != "x86_64"
 qiskit-addon-aqc-tensor[aer,quimb-jax]~=0.3.1; sys.platform != 'darwin'
 qiskit-addon-obp~=0.3.0
 qiskit-addon-cutting~=0.10.0
