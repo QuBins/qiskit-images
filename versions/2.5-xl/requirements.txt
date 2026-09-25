@@ -95,10 +95,20 @@ qiskit-addon-opt-mapper~=0.1.0
 qiskit-basis-constructor~=0.1.0
 qiskit-paulice~=0.2.1
 samplomatic~=0.21.0
-mthree~=3.0.0
 qctrl-visualizer~=11.0.0
 category_encoders~=2.11.1
 imbalanced-learn~=0.14.2
+# mthree is upstream's one package we cannot take. It publishes
+# manylinux wheels for both arches but only up to cp312, with no abi3
+# wheel in any release, and this image is Python 3.13 -- so pip falls
+# back to the sdist and the build dies on a missing g++, on BOTH
+# arches. Upstream can pin it because their test environment is on an
+# older Python. Adding a C++ toolchain to every image for one notebook
+# is the wrong trade, so mthree stays out until it ships cp313 or abi3
+# wheels. (qiskit-paulice looks similar at a glance -- its wheels are
+# tagged cp310 -- but they are cp310-abi3, which is forward-compatible,
+# so it installs fine on 3.13.)
+#
 # Not published on PyPI at all; upstream installs it straight from git
 # at a pinned commit, so this stays reproducible. It needs `git` at
 # build time, which the xl/xxl/rise apt layer already provides.
