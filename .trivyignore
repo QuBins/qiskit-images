@@ -137,3 +137,32 @@ CVE-2026-69244
 # Drop once Ray rebundles httpcore5 >=5.4.3 (track upstream Ray releases), or if
 # the xl serverless pin moves to a Ray that already has it.
 CVE-2026-54399
+
+# CVE-2026-68497 - jackson-databind HIGH (flagged 2.18.8 inside Ray's
+# ray_dist.jar; fixed in 2.18.10 / 2.21.6 / 2.22.2).
+#
+# Same vendored-jar situation as GHSA-r7wm above: jackson-databind is a Java
+# dependency Ray bundles inside ray_dist.jar, reached only via
+# qiskit-serverless -> Ray. It is not a pip-installable package, so no floor
+# can move it; the fix lands only when Ray rebundles a patched jackson.
+#
+# The 2026-09-29 nightly (run 36554075922) is the proof that it HAS been
+# rebundled upstream: 14 build jobs failed on this, and they were exactly the
+# xl/xxl flavors of 2.0-2.4, which pin qiskit-serverless 0.27-0.30. The 2.5
+# flavors PASSED the same scan on the same day, because #150 moved 2.5-xl to
+# serverless 0.35.1 and that pulls a Ray whose jar already carries a patched
+# jackson. 1.4-xl also passed: it ships no serverless, so no Ray at all.
+#
+# So this suppression is scoped, in practice, to the older minors, which are
+# deliberately frozen reproducible environments -- their serverless pins are
+# part of a mutually-consistent set tied to their Qiskit minor, and bumping
+# them to chase a vendored jar would defeat the point of pinning them.
+# Nothing in these notebooks drives Ray's Java serialization path on
+# untrusted input.
+#
+# Drop this once the 2.0-2.4 lines are retired, or if their serverless pins
+# ever move to a Ray that already carries the patched jar. It should NOT be
+# needed by 2.5 or later -- if a future 2.5 scan trips this ID again, that is
+# a regression worth investigating rather than something this entry should
+# quietly cover.
+CVE-2026-68497
