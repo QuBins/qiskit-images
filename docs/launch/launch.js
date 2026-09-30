@@ -93,23 +93,68 @@
   document.getElementById("launch-url").textContent = url;
   document.getElementById("fallback").style.display = "block";
 
-  // Fire-and-forget Umami event: which image/mode actually got
-  // launched. Best-effort — guard for the script not loading.
-  try {
-    if (window.umami && typeof window.umami.track === "function") {
-      const mode = file ? "file" : (repo ? "repo" : "bare");
-      // Which frontend the repo launch actually resolves to (file wins
-      // over repo, so a file launch is always "lab"). Mirrors the
-      // urlpath ternary above.
-      const dest = !file && repo && path
-        ? (ui === "rise" ? "rise" : ui === "rise-classic" ? "rise-classic" : "lab")
-        : "lab";
-      // Family taxonomy (Fun-with-Quantum/family/EVENTS.md): `launch` with target/image/notebook/ui.
-      // Replaces the earlier `launch-redirect` name; `mode` is kept as an extra property.
-      window.umami.track("launch", { target: "qubins", image, mode, ui: dest, notebook: (file || path || "") });
-    }
-  } catch (_) { /* analytics is best-effort */ }
+  // Umami event: which image/mode actually got launched.
+  //
+  // The tracker loads with `defer` from <head>, but this script runs
+  // synchronously at the end of <body> — i.e. *before* deferred
+  // scripts execute — so `window.umami` is never there yet at this
+  // point. (Tracking synchronously here meant zero launches were ever
+  // recorded.) So: poll for the tracker briefly, send the event, give
+  // the beacon a moment to leave (the tracker POSTs with
+  // `keepalive: true`, so it survives the navigation once started),
+  // then redirect. Analytics must never block the launch: a hard
+  // deadline redirects regardless, e.g. when the tracker is blocked.
+  const mode = file ? "file" : (repo ? "repo" : "bare");
+  // Which frontend the repo launch actually resolves to (file wins
+  // over repo, so a file launch is always "lab"). Mirrors the
+  // urlpath ternary above.
+  const dest = !file && repo && path
+    ? (ui === "rise" ? "rise" : ui === "rise-classic" ? "rise-classic" : "lab")
+    : "lab";
+  const eventProps = { image, mode, ui: dest, notebook: (file || path || "") };
 
-  // Brief delay so the user can see the destination before the jump.
-  setTimeout(() => { location.replace(url); }, 400);
+  const MIN_DELAY_MS = 400;   // let the user see the destination before the jump
+  const POLL_MS = 50;         // how often to check for window.umami
+  const MAX_WAIT_MS = 1500;   // give up on analytics after this long
+  const BEACON_MS = 250;      // grace period after track() before navigating
+  const started = Date.now();
+
+  let redirected = false;
+  const go = () => {
+    if (redirected) return;
+    redirected = true;
+    location.replace(url);
+  };
+  // Hard deadline: the redirect happens no matter what analytics does.
+  setTimeout(go, MAX_WAIT_MS + BEACON_MS);
+
+  const goAfter = (ms) => {
+    const wait = Math.max(ms, MIN_DELAY_MS - (Date.now() - started));
+    setTimeout(go, wait);
+  };
+
+  const trackThenGo = () => {
+    try {
+      // Family taxonomy v2 (Fun-with-Quantum/family/EVENTS.md): `<Site>: <what happened>`.
+      const p = window.umami.track("QuBins: notebook launch", eventProps);
+      // umami.track returns a promise that settles once the POST is
+      // done; navigate on whichever comes first — that or the grace period.
+      if (p && typeof p.then === "function") {
+        p.then(() => goAfter(0), () => goAfter(0));
+      }
+    } catch (_) { /* analytics is best-effort */ }
+    goAfter(BEACON_MS);
+  };
+
+  const poll = () => {
+    if (redirected) return;
+    if (window.umami && typeof window.umami.track === "function") {
+      trackThenGo();
+    } else if (Date.now() - started < MAX_WAIT_MS) {
+      setTimeout(poll, POLL_MS);
+    } else {
+      go(); // tracker never showed up (blocked / offline / wrong host)
+    }
+  };
+  poll();
 })();
