@@ -60,7 +60,7 @@
     const heroBtn = document.getElementById("qs-binder-xl");
     heroBtn.href = `https://mybinder.org/v2/gh/${REPO}/latest-xl`;
     heroBtn.addEventListener("click", () =>
-      track("hero-launch-click", { tag: "latest-xl" }));
+      track("QuBins: hero launch click", { tag: "latest-xl" }));
     // Featured example cards (static hrefs in index.html → /launch/).
     // Wire best-effort click tracking so we can see which intro people
     // actually open. The links work without JS; this only adds analytics.
@@ -70,11 +70,11 @@
     ]) {
       const el = document.getElementById(id);
       if (el) el.addEventListener("click", () =>
-        track("example-launch-click", { example }));
+        track("QuBins: example launch click", { example }));
     }
     document.getElementById("qs-docker-copy").addEventListener("click", (e) => {
       copyToClipboard(document.getElementById("qs-docker").textContent, e.currentTarget);
-      track("hero-docker-copy");
+      track("QuBins: hero docker copy");
     });
   }
 
@@ -153,7 +153,7 @@
       binderLink.target = "_blank";
       binderLink.rel = "noopener";
       binderLink.addEventListener("click", () =>
-        track("catalog-launch-click", { tag: img.binder_tag }));
+        track("QuBins: catalog launch click", { tag: img.binder_tag }));
       const binderImg = document.createElement("img");
       binderImg.src = `${PAGES}/badges/launch-qubins-${img.binder_tag}.svg`;
       binderImg.alt = `launch QuBins ${img.binder_tag}`;
@@ -178,7 +178,7 @@
       copyBtn.textContent = "Copy";
       copyBtn.addEventListener("click", () => {
         copyToClipboard(fullCmd, copyBtn);
-        track("catalog-docker-copy", { tag: img.binder_tag });
+        track("QuBins: catalog docker copy", { tag: img.binder_tag });
       });
       dockerCell.appendChild(copyBtn);
       tr.appendChild(dockerCell);
@@ -224,18 +224,18 @@
     // to the unfiltered view in one click.
     minorSel.value = "latest";
     minorSel.addEventListener("change", () => {
-      track("catalog-filter-minor", { value: minorSel.value || "(all)" });
+      track("QuBins: catalog filter minor", { value: minorSel.value || "(all)" });
       applyFilters();
     });
     document.getElementById("filter-flavor").addEventListener("change", (e) => {
-      track("catalog-filter-flavor", { value: e.target.value || "(all)" });
+      track("QuBins: catalog filter flavor", { value: e.target.value || "(all)" });
       applyFilters();
     });
 
     const showAll = document.getElementById("filter-show-all");
     if (showAll) {
       showAll.addEventListener("click", () => {
-        track("catalog-show-all");
+        track("QuBins: catalog show all");
         minorSel.value = "";
         applyFilters();
       });
@@ -337,14 +337,14 @@
     document.getElementById("launch-copy")
       .addEventListener("click", () => {
         copyOutput("launch-out", "launch-copy", "launch-open");
-        track("launch-url-copy", {
+        track("QuBins: launch url copy", {
           image: document.getElementById("launch-image").value,
         });
       });
     document.getElementById("launch-badge-copy")
       .addEventListener("click", (e) => {
         copyToClipboard(document.getElementById("launch-badge-md").value, e.currentTarget);
-        track("launch-badge-copy", {
+        track("QuBins: launch badge copy", {
           image: document.getElementById("launch-image").value,
         });
       });
@@ -441,7 +441,7 @@
       note.appendChild(span);
       if (det.owner && det.repo) {
         note.appendChild(makeOverrideLink("Clone full repo instead?", () => {
-          track("launch-mode-override", { from: "file", to: "clone" });
+          track("QuBins: launch mode override", { from: "file", to: "clone" });
           // Synthesise a github.com URL so detectMode re-runs in clone mode.
           urlField.value = `https://github.com/${det.owner}/${det.repo}`;
           if (det.branch) branchField.value = det.branch;
@@ -480,7 +480,7 @@
         if (m) {
           const owner = m[1], repo = m[2];
           note.appendChild(makeOverrideLink("Open just this notebook (no repo clone) instead?", () => {
-            track("launch-mode-override", { from: "clone", to: "file" });
+            track("QuBins: launch mode override", { from: "clone", to: "file" });
             urlField.value = `https://raw.githubusercontent.com/${owner}/${repo}/${branchNow}/${pathNow}`;
             overrideMode = "file";
             refreshLaunch();
