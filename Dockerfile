@@ -46,17 +46,27 @@ RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl || "${QISK
 # (a single ~250-byte text file) and the layer cache gets keyed on
 # ${QISKIT_VERSION} via the next RUN anyway.
 COPY versions /tmp/versions
-# No in-image security upgrades are currently needed. Base digest
-# 4ef9cfd5 (Ubuntu 26.04.1) already ships past every floor this file
-# used to carry: jupyter-server 2.21.1, msgpack 1.2.2, mistune 3.3.4,
-# jupyterlab 4.6.4, cryptography 50.0.1, tornado 6.5.10, anyio 4.15.1.
-# The git history has the per-CVE rationale for each if one ever needs
-# reinstating.
+# Three post-install repair floors.
 #
-# The jupyterlab floor in particular HAD to go: it was pinned
-# `>=4.5.10,<4.6` to stay on the 4.5 line, and the new base ships
-# 4.6.4, so keeping it would have silently downgraded the base's
-# jupyterlab rather than protecting anything.
+# Base digest 4ef9cfd5 (Ubuntu 26.04.1) is clean for all of these --
+# it ships msgpack 1.2.2, urllib3 2.8.0 and setuptools 84.0.0. The
+# problem is that OUR OWN requirements install, which runs after it,
+# drags them back down: the 1.4-small image came out with msgpack
+# 1.1.2, urllib3 2.7.0 and setuptools 70.3.0, all flagged by Trivy.
+#
+# That is why this step runs AFTER the requirements install rather
+# than being a base-image workaround. The distinction matters: the
+# seven floors this file used to carry were compensating for an old
+# base and are genuinely gone now (base ships jupyter-server 2.21.1,
+# mistune 3.3.4, jupyterlab 4.6.4, cryptography 50.0.1, tornado
+# 6.5.10, anyio 4.15.1 -- all past their old floors). These three are
+# a different thing and have to stay until the pins that pull them
+# down are tracked to their source.
+#
+# jupyterlab is deliberately NOT floored here any more. It used to be
+# pinned `>=4.5.10,<4.6` to hold the 4.5 line; the new base ships
+# 4.6.4, so that cap would now downgrade the base rather than protect
+# anything.
 #
 # The install goes through a retry wrapper. The xl/xxl wheelsets pull
 # several 40-80 MB binary wheels (ray, symengine, pyarrow, torch); when
@@ -81,6 +91,7 @@ RUN pip_retry() { \
       return 1; \
     }; \
     pip_retry -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
+ && pip_retry --upgrade 'msgpack>=1.2.1' 'urllib3>=2.8.0' 'setuptools>=78.1.1' \
  && rm -rf /tmp/versions \
  && fix-permissions "${CONDA_DIR}" \
  && fix-permissions "/home/${NB_USER}"
