@@ -1,0 +1,26 @@
+# Artifact Hub repository metadata for ghcr.io/qubins/images.
+#
+# This file is NOT read from the git repo. Artifact Hub reads it from
+# the OCI registry, so it has to be pushed as an artifact next to the
+# images, once, with oras:
+#
+#   oras push \
+#     ghcr.io/qubins/images:artifacthub.io \
+#     --config /dev/null:application/vnd.cncf.artifacthub.config.v1+json \
+#     artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1+yaml
+#
+# It is kept in git so the values are reviewable and the push is
+# reproducible. `repositoryID` is issued by Artifact Hub when the
+# repository is first added in the control panel -- fill it in after
+# that, then push. Pushing it enables the Ownership claim / Verified
+# publisher badge.
+#
+# Note: Artifact Hub lists at most 10 tags per repository and tags are
+# configured in its control panel, not here. `latest`, `latest-small`,
+# `latest-xl` and `latest-xxl` (all mutable) are the sensible set --
+# the per-minor tags would burn the budget for little gain.
+repositoryID: ""
+owners:
+  - name: QuBins
+    email: ""
+ignore: []
