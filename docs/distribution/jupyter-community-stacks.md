@@ -31,9 +31,7 @@ Append to the link-reference block below the table:
 
 ## Before submitting
 
-- [ ] **Add a LICENSE.** The repo currently has none, so it is legally
-      "all rights reserved". That is a poor look on a list of images
-      inviting reuse, and it blocks the Artifact Hub `license` field too.
+- [x] **LICENSE** — Apache-2.0, matching Qiskit itself.
 - [ ] Check the Binder link actually cold-starts (`latest-xl` is ~2-3 GB;
       the warm-up cron keeps it warm, but a reviewer may hit a cold
       backend and judge the image by it).

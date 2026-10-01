@@ -539,14 +539,22 @@ jobs:
           platforms: ${{ matrix.platform.name }}
           tags: ghcr.io/${{ steps.repo.outputs.owner_lc }}/${{ env.IMAGE }}:${{ matrix.version }}-${{ matrix.platform.arch }}
           push: true
-          # OCI standard image-source / image-description labels +
-          # a project-namespaced label for the qiskit patch version.
-          # The base image (jupyter/base-notebook → ubuntu) ships
-          # its own `org.opencontainers.image.version` value (the
-          # Ubuntu release, e.g. "24.04"), so a same-name override
-          # is fragile and confusing. Use a dedicated key instead.
-          # build-pages-data.py reads org.qubins.qiskit.patch from
-          # the image config blob and surfaces it in versions.json.
+          # OCI standard labels + a project-namespaced label for the
+          # qiskit patch version.
+          #
+          # image.version is set to the qiskit patch deliberately. Left
+          # alone it inherits the base image's value -- the Ubuntu
+          # release, "24.04" -- which is simply un-overridden leakage
+          # from jupyter/base-notebook, not a statement about this
+          # image. The OCI spec defines the key as the version of the
+          # *packaged software*, which here is Qiskit, and Artifact Hub
+          # surfaces it publicly as the package version, where "24.04"
+          # on a Qiskit image would be actively wrong.
+          #
+          # org.qubins.qiskit.patch stays and keeps the same value:
+          # build-pages-data.py reads that key (and deliberately not
+          # image.version, precisely because it used to be Ubuntu's),
+          # so nothing downstream changes.
           #
           # The io.artifacthub.* labels and image.created are what let
           # Artifact Hub index these images at all: readme-url and
@@ -558,6 +566,8 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=QuBins ${{ matrix.version }} — prebuilt Qiskit ${{ steps.qversion.outputs.patch }} environment
             org.opencontainers.image.created=${{ steps.qversion.outputs.created }}
+            org.opencontainers.image.version=${{ steps.qversion.outputs.patch }}
+            io.artifacthub.package.license=Apache-2.0
             org.opencontainers.image.title=QuBins ${{ matrix.version }}
             org.opencontainers.image.url=https://qubins.org/
             org.opencontainers.image.documentation=https://github.com/${{ github.repository }}#readme
