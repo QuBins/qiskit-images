@@ -100,7 +100,6 @@ CVE-2026-54513
 #
 # Drop once Ray rebundles jackson-core >=2.18.8 (track upstream Ray releases),
 # or if the xl serverless pin moves to a Ray that already has it.
-GHSA-r7wm-3cxj-wff9
 
 # CVE-2026-69244 - aiohttp HIGH (fixed 3.14.3).
 #
@@ -136,7 +135,6 @@ CVE-2026-69244
 #
 # Drop once Ray rebundles httpcore5 >=5.4.3 (track upstream Ray releases), or if
 # the xl serverless pin moves to a Ray that already has it.
-CVE-2026-54399
 
 # CVE-2026-68497 - jackson-databind HIGH (flagged 2.18.8 inside Ray's
 # ray_dist.jar; fixed in 2.18.10 / 2.21.6 / 2.22.2).
@@ -165,7 +163,6 @@ CVE-2026-54399
 # needed by 2.5 or later -- if a future 2.5 scan trips this ID again, that is
 # a regression worth investigating rather than something this entry should
 # quietly cover.
-CVE-2026-68497
 # CVE-2026-89407, CVE-2026-91776 - two more jackson-databind HIGHs in the
 # same ray_dist.jar (2.18.8; fixed 2.18.11 / 2.21.7 / 2.22.3), landing in
 # Trivy's DB on 2026-10-02, three days after CVE-2026-68497. Identical
@@ -177,8 +174,6 @@ CVE-2026-68497
 # that cadence holds, the durable fix is not another suppression but
 # moving qiskit-serverless (and with it Ray) off the frozen minors --
 # see the discussion on scoping serverless to xxl only.
-CVE-2026-89407
-CVE-2026-91776
 
 # Trivy layer-resolution artefacts, NOT vulnerabilities in the image:
 #   GHSA-6v7p-g79w-8964  msgpack     reported 1.1.2  (image has 1.2.3)
@@ -213,3 +208,12 @@ GHSA-6v7p-g79w-8964
 CVE-2025-47273
 CVE-2026-97687
 CVE-2026-97689
+
+# Historical note: GHSA-r7wm-3cxj-wff9, CVE-2026-54399, CVE-2026-68497,
+# CVE-2026-89407 and CVE-2026-91776 used to be listed here. They were
+# all findings inside Ray's vendored ray_dist.jar, and that whole file
+# is now excluded from the scan via --skip-files in build-matrix.yml,
+# which makes per-ID entries redundant. See the rationale there.
+#
+# CVE-2026-69244 (aiohttp) stays below: it is a separate vendored copy
+# under ray/_private/runtime_env/agent/thirdparty_files, not in the jar.
