@@ -10,6 +10,24 @@ ENV QISKIT_VERSION=${QISKIT_VERSION}
 
 USER root
 
+# OpenSSL security upgrade, for EVERY flavor.
+#
+# CVE-2026-84782 (HIGH) hits libssl3t64 / openssl /
+# openssl-provider-legacy. Base digest 4ef9cfd5 ships
+# 3.5.5-1ubuntu3.5; the fix is 3.5.5-1ubuntu3.6 and Ubuntu 26.04's
+# archive already carries 3.5.5-1ubuntu3.7, so a targeted upgrade
+# genuinely resolves it rather than suppressing it.
+#
+# This is an OS package, so unlike a Python finding there is no pip
+# floor that could reach it, and no newer base exists -- the
+# 2026-09-29 rebuild is the current one. Ungated on purpose: the CVE
+# is in the base layer, so -small is affected exactly like xl.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends --only-upgrade \
+      libssl3t64 openssl openssl-provider-legacy \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
+
 # Two apt packages for the xl/xxl/rise flavors:
 #
 #  - git: these images bundle nbgitpuller (xxl and rise both pull the xl
