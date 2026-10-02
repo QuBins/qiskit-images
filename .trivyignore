@@ -166,6 +166,19 @@ CVE-2026-54399
 # a regression worth investigating rather than something this entry should
 # quietly cover.
 CVE-2026-68497
+# CVE-2026-89407, CVE-2026-91776 - two more jackson-databind HIGHs in the
+# same ray_dist.jar (2.18.8; fixed 2.18.11 / 2.21.7 / 2.22.3), landing in
+# Trivy's DB on 2026-10-02, three days after CVE-2026-68497. Identical
+# situation and identical scoping: the 2026-10-02 matrix failed exactly
+# the 2.0-2.4 xl/xxl flavors and every 2.5 flavor passed, because 2.5
+# runs qiskit-serverless 0.35.1 and a Ray with a patched jar.
+#
+# Third jackson round in a month, all from the same vendored jar. If
+# that cadence holds, the durable fix is not another suppression but
+# moving qiskit-serverless (and with it Ray) off the frozen minors --
+# see the discussion on scoping serverless to xxl only.
+CVE-2026-89407
+CVE-2026-91776
 
 # Trivy layer-resolution artefacts, NOT vulnerabilities in the image:
 #   GHSA-6v7p-g79w-8964  msgpack     reported 1.1.2  (image has 1.2.3)
