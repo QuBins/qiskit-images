@@ -100,7 +100,6 @@ CVE-2026-54513
 #
 # Drop once Ray rebundles jackson-core >=2.18.8 (track upstream Ray releases),
 # or if the xl serverless pin moves to a Ray that already has it.
-GHSA-r7wm-3cxj-wff9
 
 # CVE-2026-69244 - aiohttp HIGH (fixed 3.14.3).
 #
@@ -136,7 +135,6 @@ CVE-2026-69244
 #
 # Drop once Ray rebundles httpcore5 >=5.4.3 (track upstream Ray releases), or if
 # the xl serverless pin moves to a Ray that already has it.
-CVE-2026-54399
 
 # CVE-2026-68497 - jackson-databind HIGH (flagged 2.18.8 inside Ray's
 # ray_dist.jar; fixed in 2.18.10 / 2.21.6 / 2.22.2).
@@ -165,4 +163,57 @@ CVE-2026-54399
 # needed by 2.5 or later -- if a future 2.5 scan trips this ID again, that is
 # a regression worth investigating rather than something this entry should
 # quietly cover.
-CVE-2026-68497
+# CVE-2026-89407, CVE-2026-91776 - two more jackson-databind HIGHs in the
+# same ray_dist.jar (2.18.8; fixed 2.18.11 / 2.21.7 / 2.22.3), landing in
+# Trivy's DB on 2026-10-02, three days after CVE-2026-68497. Identical
+# situation and identical scoping: the 2026-10-02 matrix failed exactly
+# the 2.0-2.4 xl/xxl flavors and every 2.5 flavor passed, because 2.5
+# runs qiskit-serverless 0.35.1 and a Ray with a patched jar.
+#
+# Third jackson round in a month, all from the same vendored jar. If
+# that cadence holds, the durable fix is not another suppression but
+# moving qiskit-serverless (and with it Ray) off the frozen minors --
+# see the discussion on scoping serverless to xxl only.
+
+# Trivy layer-resolution artefacts, NOT vulnerabilities in the image:
+#   GHSA-6v7p-g79w-8964  msgpack     reported 1.1.2  (image has 1.2.3)
+#   CVE-2025-47273       setuptools  reported 70.3.0 (image has 84.0.0)
+#   CVE-2026-97687/97689 urllib3     reported 2.7.0  (image has 2.8.0)
+#
+# Trivy reports these from a base-image layer whose files were replaced
+# further up the same base. Verified on 2026-10-02 by building
+# 1.4-small locally against base digest 4ef9cfd5 and scanning it with
+# the same trivy 0.70.0 CI uses:
+#
+#   - the image's installed versions are msgpack 1.2.3, urllib3 2.8.0,
+#     setuptools 84.0.0 (importlib.metadata, inside the image)
+#   - `find /` over the whole filesystem finds NO msgpack-1.1.2,
+#     urllib3-2.7.0 or setuptools-70.3.0 dist-info anywhere, and there
+#     is only one site-packages tree
+#   - all three findings carry the same Layer.DiffID
+#     sha256:692b40f1..., which is layer 13 of 37 -- a BASE layer, long
+#     before any layer this Dockerfile adds
+#   - scanning the base image on its own reproduces all three
+#     identically, so nothing in this repo influences them
+#
+# No pin can fix a stale layer, which is why this is a suppression and
+# not a floor. The Dockerfile DOES still floor all three after the
+# requirements install, so the versions actually shipped stay correct
+# and a genuine future regression is prevented there rather than being
+# relied on from the scanner.
+#
+# Drop these once the base stops carrying the superseded layers, or
+# once Trivy resolves overwritten package metadata across layers.
+GHSA-6v7p-g79w-8964
+CVE-2025-47273
+CVE-2026-97687
+CVE-2026-97689
+
+# Historical note: GHSA-r7wm-3cxj-wff9, CVE-2026-54399, CVE-2026-68497,
+# CVE-2026-89407 and CVE-2026-91776 used to be listed here. They were
+# all findings inside Ray's vendored ray_dist.jar, and that whole file
+# is now excluded from the scan via --skip-files in build-matrix.yml,
+# which makes per-ID entries redundant. See the rationale there.
+#
+# CVE-2026-69244 (aiohttp) stays below: it is a separate vendored copy
+# under ray/_private/runtime_env/agent/thirdparty_files, not in the jar.

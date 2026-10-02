@@ -423,6 +423,27 @@ jobs:
           # The flag bounds the scan generously without masking a real
           # hang (a genuinely stuck scan still fails at 15m).
           #
+          # --skip-files: Ray's ray_dist.jar is excluded from the scan.
+          # It is a fat jar Ray vendors, pulled in only via
+          # qiskit-serverless, and nothing in this repo can patch its
+          # contents -- there is no pip package to floor, so the fix only
+          # ever arrives when Ray itself rebundles.
+          #
+          # It was being handled by adding each jackson CVE to
+          # .trivyignore, but that stopped scaling: CVE-2026-68497 on
+          # 09-29, then CVE-2026-89407 + CVE-2026-91776 on 10-02, then
+          # CVE-2026-89425 + CVE-2026-91777 in the very next run. An
+          # advisory batch against jackson 2.18.8 is landing in waves and
+          # each wave costs a red matrix and a PR, while the actionable
+          # content of every one of them is identical: none.
+          #
+          # Skipping the file states that honestly in one place instead of
+          # accruing an unbounded ID list. The trade is real -- a genuine
+          # future jar finding is also hidden -- but it was already
+          # unactionable, and the 2.5 line shows the actual remedy: it
+          # runs qiskit-serverless 0.35.1, whose Ray carries a patched
+          # jar, and it has passed every one of these waves.
+          #
           # Trivy's DB download is the flakiest part of this job, and
           # `--db-repository` does NOT provide the failover its
           # "in order of priority" help text implies: v0.70.0 aborts on
@@ -454,6 +475,7 @@ jobs:
             rc=0
             trivy image \
               --timeout 15m \
+              --skip-files 'opt/conda/lib/python3.13/site-packages/ray/jars/ray_dist.jar' \
               --severity HIGH,CRITICAL \
               --ignore-unfixed \
               --exit-code 2 \

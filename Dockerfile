@@ -3,12 +3,30 @@
 # go through the full Trivy + smoke gate like any other change.
 # Tag retained in the comment for human readability — the digest is
 # the source of truth.
-FROM quay.io/jupyter/base-notebook:python-3.13@sha256:9388739dcd18bb191fac32b77aeef93d5babd981a38dca76a69abd015ce3bf87
+FROM quay.io/jupyter/base-notebook:python-3.13@sha256:4ef9cfd552d265799bd9e959a87fb674da8cea738145ce49e7d286cb967ad1d7
 
 ARG QISKIT_VERSION
 ENV QISKIT_VERSION=${QISKIT_VERSION}
 
 USER root
+
+# OpenSSL security upgrade, for EVERY flavor.
+#
+# CVE-2026-84782 (HIGH) hits libssl3t64 / openssl /
+# openssl-provider-legacy. Base digest 4ef9cfd5 ships
+# 3.5.5-1ubuntu3.5; the fix is 3.5.5-1ubuntu3.6 and Ubuntu 26.04's
+# archive already carries 3.5.5-1ubuntu3.7, so a targeted upgrade
+# genuinely resolves it rather than suppressing it.
+#
+# This is an OS package, so unlike a Python finding there is no pip
+# floor that could reach it, and no newer base exists -- the
+# 2026-09-29 rebuild is the current one. Ungated on purpose: the CVE
+# is in the base layer, so -small is affected exactly like xl.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends --only-upgrade \
+      libssl3t64 openssl openssl-provider-legacy \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
 
 # Two apt packages for the xl/xxl/rise flavors:
 #
@@ -46,59 +64,29 @@ RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl || "${QISK
 # (a single ~250-byte text file) and the layer cache gets keyed on
 # ${QISKIT_VERSION} via the next RUN anyway.
 COPY versions /tmp/versions
-# Seven in-image security upgrades, all for findings the base digest
-# 9388739d still ships and that have an available fix (so Trivy's
-# --ignore-unfixed gate flags them on every flavor):
+# Three post-install repair floors.
 #
-#  - jupyter-server: CVE-2026-44727 (CRITICAL stored XSS in
-#    NbconvertFileHandler), base ships 2.19.0, fixed in 2.20.0. (An
-#    earlier 2.18.0 floor for a different CVE set was dropped in #91 when
-#    the base caught up — this re-introduces the floor for the new
-#    finding.)
-#  - msgpack: GHSA-6v7p-g79w-8964 (HIGH out-of-bounds read / crash in
-#    MessagePack for Python), base conda env ships 1.1.2, fixed in 1.2.1.
-#    msgpack is a base/transitive package (no requirements.txt pin); the
-#    1.1.2 -> 1.2.1 minor bump satisfies the loose `msgpack<2` caps its
-#    downstream consumers (ray / qiskit-serverless) use.
-#  - mistune: CVE-2026-49851 (HIGH denial of service via crafted
-#    Markdown), base ships 3.2.1, fixed in 3.3.0. mistune is a transitive
-#    nbconvert dependency (no requirements.txt pin); nbconvert caps it at
-#    `mistune<4,>=2.0.3`, so the >=3.3.0 floor stays in range.
-#  - jupyterlab: GHSA-gx64-gj6p-pc4c (image-viewer XSS) + GHSA-pppj-hq3g-57pj
-#    (XSS via crafted settings), both HIGH; base ships 4.5.8, fixed in the
-#    4.5.10 patch (and 4.6.2). jupyterlab is a base package (not pinned in
-#    any requirements.txt); the floor is capped `<4.6` to take the patch on
-#    the shipped 4.5 line and avoid the 4.6 feature jump for the bundled
-#    jupyterlab-rise / -open-url-parameter extensions.
-#  - cryptography: CVE-2026-69247 (HIGH), base conda env ships 49.0.0,
-#    fixed in 50.0.0. cryptography is a base/transitive package (no
-#    requirements.txt pin); a base-layer finding so it hits every flavor
-#    incl. -small. Added 2026-08-06.
-#  - tornado: CVE-2026-82397 (HIGH), base conda env ships 6.5.7, fixed in
-#    the 6.5.8 patch. tornado is a base/transitive package (no
-#    requirements.txt pin) pulled in by jupyter-server / jupyterlab /
-#    notebook / ipykernel / terminado; every one of them declares an
-#    open-ended `tornado>=6.x` with no upper cap, so the floor stays in
-#    range for all of them. A base-layer finding, so it hits every flavor
-#    incl. -small -- which is why it belongs here and not in
-#    versions/_xl-base.txt. Failed the whole 2026-09-03 nightly matrix
-#    (run 33732898839: all 34 build jobs). Added 2026-09-03.
-#  - anyio: CVE-2026-63374 (CRITICAL), base conda env ships 4.13.0,
-#    fixed in 4.14.2. TLSStream encoded host names with IDNA 2003,
-#    which allows TLS certificate spoofing. anyio is a base/transitive
-#    package (no requirements.txt pin) pulled in by httpx / httpcore /
-#    starlette / jupyter-server / watchfiles; every cap is either
-#    open-ended or `anyio<5`, so the floor stays in range for all of
-#    them. A base-layer finding -- confirmed identical in -small and
-#    -xl scans -- so it belongs here rather than in
-#    versions/_xl-base.txt, which would miss the six -small flavors.
-#    Floored at the fix version rather than the current 4.15.1 to keep
-#    the change minimal. Failed three whole nightly matrices
-#    (2026-09-19, 09-20, 09-21: all 34 build jobs each), during which
-#    nothing published. Added 2026-09-21.
+# Base digest 4ef9cfd5 (Ubuntu 26.04.1) is clean for all of these --
+# it ships msgpack 1.2.2, urllib3 2.8.0 and setuptools 84.0.0. The
+# problem is that OUR OWN requirements install, which runs after it,
+# drags them back down: the 1.4-small image came out with msgpack
+# 1.1.2, urllib3 2.7.0 and setuptools 70.3.0, all flagged by Trivy.
 #
-# Remove each once the base image ships past the respective fix.
-# Both installs go through a retry wrapper. The xl/xxl wheelsets pull
+# That is why this step runs AFTER the requirements install rather
+# than being a base-image workaround. The distinction matters: the
+# seven floors this file used to carry were compensating for an old
+# base and are genuinely gone now (base ships jupyter-server 2.21.1,
+# mistune 3.3.4, jupyterlab 4.6.4, cryptography 50.0.1, tornado
+# 6.5.10, anyio 4.15.1 -- all past their old floors). These three are
+# a different thing and have to stay until the pins that pull them
+# down are tracked to their source.
+#
+# jupyterlab is deliberately NOT floored here any more. It used to be
+# pinned `>=4.5.10,<4.6` to hold the 4.5 line; the new base ships
+# 4.6.4, so that cap would now downgrade the base rather than protect
+# anything.
+#
+# The install goes through a retry wrapper. The xl/xxl wheelsets pull
 # several 40-80 MB binary wheels (ray, symengine, pyarrow, torch); when
 # the PyPI CDN drops one mid-body, pip aborts with
 #   ProtocolError: ('Connection broken: IncompleteRead(...)')
@@ -121,7 +109,7 @@ RUN pip_retry() { \
       return 1; \
     }; \
     pip_retry -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
- && pip_retry --upgrade 'jupyter-server>=2.20.0' 'msgpack>=1.2.1' 'mistune>=3.3.0' 'jupyterlab>=4.5.10,<4.6' 'cryptography>=50.0.0' 'tornado>=6.5.8' 'anyio>=4.14.2' \
+ && pip_retry --upgrade 'msgpack>=1.2.1' 'urllib3>=2.8.0' 'setuptools>=78.1.1' \
  && rm -rf /tmp/versions \
  && fix-permissions "${CONDA_DIR}" \
  && fix-permissions "/home/${NB_USER}"
