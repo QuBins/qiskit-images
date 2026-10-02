@@ -1,0 +1,113 @@
+name: nb-tester drift
+
+# Weekly report on where versions/<latest>-xl/requirements.txt has
+# drifted from Qiskit/documentation's nb-tester requirements.
+#
+# The xl set deliberately tracks upstream (QuBins#148), and
+# doQumentation builds its Binder and Code Engine images from 2.5-xl,
+# so drift shows up as docs notebooks failing for users. Nothing
+# noticed when upstream last moved: the runtime pin sat two minors
+# behind for a week until someone compared by hand (QuBins#157).
+#
+# REPORT ONLY, on purpose. Several differences are intentional and
+# permanent -- see EXCEPTIONS/OURS_ONLY in the script -- so an auto-PR
+# would either fight them every week or have to encode the same
+# judgement anyway. This opens or updates a single issue instead.
+#
+# Deliberately NOT folded into detect-new-qiskit.yml: that runs daily
+# and can open a release PR, which is a different cadence and a
+# different action from "our pins drifted".
+
+on:
+  schedule:
+    # Mondays 06:00 UTC, clear of the nightly build and prune windows.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nbtester-drift
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Resolve the current Qiskit minor
+        id: minor
+        # Single source of truth: the same LATEST_QISKIT the build
+        # matrix uses for its latest-* aliases, so this follows the
+        # minor bump automatically instead of hard-coding 2.5.
+        run: |
+          set -euo pipefail
+          minor="$(grep -oE "^  LATEST_QISKIT: *'[^']+'" .github/workflows/build-matrix.yml \
+                   | grep -oE "'[^']+'" | tr -d "'")"
+          [ -n "$minor" ] || { echo "could not read LATEST_QISKIT" >&2; exit 1; }
+          echo "minor=${minor}" >> "$GITHUB_OUTPUT"
+          echo "comparing ${minor}-xl against upstream nb-tester"
+
+      - name: Compare against upstream
+        id: drift
+        run: |
+          set -euo pipefail
+          rc=0
+          python3 .github/scripts/check-nbtester-drift.py \
+            --minor "${{ steps.minor.outputs.minor }}" > /tmp/report.md || rc=$?
+          # 0 = clean, 1 = drift, 2 = could not compare. Only 2 is a
+          # failure of this job; drift is the thing it exists to find.
+          if [ "$rc" = "2" ]; then
+            echo "::error::drift check could not run"; cat /tmp/report.md; exit 1
+          fi
+          echo "drift=$([ "$rc" = "1" ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+          cat /tmp/report.md >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/report.md
+
+      - name: Open or update the drift issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MINOR: ${{ steps.minor.outputs.minor }}
+          DRIFT: ${{ steps.drift.outputs.drift }}
+        # One issue, reused. A new issue every week would be noise, and
+        # closing/reopening loses the discussion, so the body is
+        # rewritten in place and the issue is closed when drift clears.
+        run: |
+          set -euo pipefail
+          title="nb-tester drift: ${MINOR}-xl vs upstream"
+          existing="$(gh issue list --state open --search "\"${title}\" in:title" \
+                        --json number,title \
+                        --jq "[.[] | select(.title == \"${title}\")][0].number // empty")"
+
+          if [ "${DRIFT}" = "no" ]; then
+            if [ -n "${existing}" ]; then
+              gh issue comment "${existing}" --body "Drift cleared: \`${MINOR}-xl\` now matches upstream nb-tester. Closing."
+              gh issue close "${existing}"
+              echo "closed #${existing}"
+            else
+              echo "no drift, no open issue - nothing to do"
+            fi
+            exit 0
+          fi
+
+          {
+            cat /tmp/report.md
+            echo
+            echo "---"
+            echo "_Updated automatically by \`.github/workflows/nbtester-drift.yml\`"
+            echo "(run $GITHUB_RUN_ID). Report only -- the differences need judgement._"
+          } > /tmp/issue.md
+
+          if [ -n "${existing}" ]; then
+            gh issue edit "${existing}" --body-file /tmp/issue.md
+            echo "updated #${existing}"
+          else
+            gh issue create --title "${title}" --body-file /tmp/issue.md
+          fi
