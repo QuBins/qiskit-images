@@ -106,6 +106,13 @@ samplomatic~=0.21.0
 qctrl-visualizer~=11.0.0
 category_encoders~=2.11.1
 imbalanced-learn~=0.14.2
+# Surfaced by the first weekly drift report (QuBins#161). qrmi is a
+# Rust extension but ships cp311-abi3 manylinux_2_28 wheels for both
+# x86_64 and aarch64, so it installs on 3.13 without a toolchain;
+# qiskit-mitigation is pure python. Both checked against PyPI for
+# arch, interpreter tag and requires_python before adding.
+qrmi~=0.25.1
+qiskit-mitigation~=0.1.1
 # mthree is upstream's one package we cannot take. It publishes
 # manylinux wheels for both arches but only up to cp312, with no abi3
 # wheel in any release, and this image is Python 3.13 -- so pip falls
