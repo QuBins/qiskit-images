@@ -123,5 +123,87 @@ class CompareTests(unittest.TestCase):
                 self.assertTrue(why.strip(), f"{name} has no documented reason")
 
 
+def _fake_pypi(projects: dict[str, dict[str, list[str]]]):
+    """projects: name -> {version: requires_dist}. Mimics the two PyPI
+    JSON shapes runtime_unblock() reads."""
+    def get(name, version=None):
+        vers = projects[name]
+        if version:
+            return {"info": {"requires_dist": vers[version]}}
+        return {"releases": {v: [{"yanked": False}] for v in vers}}
+    return get
+
+
+class SpecTests(unittest.TestCase):
+    def setUp(self):
+        self.m = _load()
+
+    def test_compatible_release(self):
+        self.assertTrue(self.m.spec_contains("~=0.49.0", "0.49.3"))
+        self.assertFalse(self.m.spec_contains("~=0.49.0", "0.50.0"))
+        self.assertTrue(self.m.spec_contains("~=0.17", "0.17.4"))
+
+    def test_range_and_empty(self):
+        self.assertTrue(self.m.spec_contains("<0.50.0,>=0.49.0", "0.49.0"))
+        self.assertFalse(self.m.spec_contains("<0.50.0,>=0.49.0", "0.50.0"))
+        self.assertTrue(self.m.spec_contains("", "9.9"))
+
+    def test_prerelease_is_never_latest(self):
+        self.assertEqual(self.m.latest_final(
+            {"releases": {"0.50.0": [{}], "0.51.0rc1": [{}], "0.49.9": [{}]}}), "0.50.0")
+
+    def test_requirement_spec_skips_extras(self):
+        rd = ["qiskit-ibm-runtime[doc]; extra == \"dev\"",
+              "qiskit-ibm-runtime<0.50.0,>=0.49.0"]
+        self.assertEqual(self.m.requirement_spec(rd, "qiskit_ibm_runtime"),
+                         "<0.50.0,>=0.49.0")
+        self.assertIsNone(self.m.requirement_spec(rd, "qiskit-serverless"))
+
+
+class RuntimeUnblockTests(unittest.TestCase):
+    """The Oct 2026 situation and the two ways it can resolve."""
+
+    OURS = {"qiskit-ibm-runtime": "~=0.49.0", "qiskit-serverless": "~=0.35.1",
+            "qiskit-ibm-catalog": "~=0.19.0"}
+    RUNTIME = {"0.49.0": [], "0.50.0": []}
+
+    def setUp(self):
+        self.m = _load()
+
+    def run_with(self, serverless, catalog):
+        return self.m.runtime_unblock(self.OURS, _fake_pypi({
+            "qiskit-ibm-runtime": self.RUNTIME,
+            "qiskit-serverless": serverless,
+            "qiskit-ibm-catalog": catalog}))
+
+    def test_blocked_by_serverless(self):
+        r = self.run_with({"0.36.0": ["qiskit-ibm-runtime<0.50.0,>=0.49.0"]},
+                          {"0.20.0": ["qiskit-serverless~=0.36.0"]})
+        self.assertEqual(r["status"], "blocked")
+        self.assertIn("qiskit-serverless` (0.36.0)", r["message"])
+
+    def test_blocked_by_catalog_when_serverless_moved_first(self):
+        r = self.run_with({"0.36.0": ["qiskit-ibm-runtime<0.50.0,>=0.49.0"],
+                           "0.37.0": ["qiskit-ibm-runtime<0.51.0,>=0.50.0"]},
+                          {"0.20.0": ["qiskit-serverless~=0.36.0"]})
+        self.assertEqual(r["status"], "blocked")
+        self.assertIn("qiskit-ibm-catalog` (0.20.0) still pins", r["message"])
+
+    def test_unblocked_proposes_all_three_pins(self):
+        r = self.run_with({"0.36.0": ["qiskit-ibm-runtime<0.50.0,>=0.49.0"],
+                           "0.37.0": ["qiskit-ibm-runtime<0.51.0,>=0.50.0"]},
+                          {"0.20.0": ["qiskit-serverless~=0.36.0"],
+                           "0.21.0": ["qiskit-serverless~=0.37.0"]})
+        self.assertEqual(r["status"], "unblocked")
+        self.assertEqual(r["pins"], {"qiskit-ibm-runtime": "~=0.50.0",
+                                     "qiskit-serverless": "~=0.37.0",
+                                     "qiskit-ibm-catalog": "~=0.21.0"})
+
+    def test_current_when_pin_already_admits_latest(self):
+        ours = dict(self.OURS, **{"qiskit-ibm-runtime": "~=0.50.0"})
+        r = self.m.runtime_unblock(ours, _fake_pypi({"qiskit-ibm-runtime": self.RUNTIME}))
+        self.assertEqual(r["status"], "current")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -14,6 +14,14 @@ name: nb-tester drift
 # would either fight them every week or have to encode the same
 # judgement anyway. This opens or updates a single issue instead.
 #
+# It also watches what actually holds the runtime pin back: the
+# catalog -> serverless -> runtime pin chain on PyPI. When a newer
+# runtime becomes installable with them (e.g. serverless 0.37 allowing
+# runtime 0.50, which 16 docs notebooks need -- QuBins#148), that opens
+# the issue too, even before upstream nb-tester moves. Dependabot does
+# not catch this: bumping serverless alone will not resolve while the
+# runtime pin is still on the old minor.
+#
 # Deliberately NOT folded into detect-new-qiskit.yml: that runs daily
 # and can open a release PR, which is a different cadence and a
 # different action from "our pins drifted".
