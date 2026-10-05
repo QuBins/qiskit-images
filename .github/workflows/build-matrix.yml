@@ -545,6 +545,10 @@ jobs:
             -c 'import qiskit; print(qiskit.__version__)')"
           echo "patch=${patch}" >> "$GITHUB_OUTPUT"
           echo "Captured qiskit==${patch}"
+          # RFC3339 build time. Artifact Hub REQUIRES
+          # org.opencontainers.image.created to index an image at all,
+          # and buildx does not set it for us.
+          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Push to GHCR (with provenance attestation)
         if: env.PUBLISH == 'true'
@@ -556,18 +560,42 @@ jobs:
           platforms: ${{ matrix.platform.name }}
           tags: ghcr.io/${{ steps.repo.outputs.owner_lc }}/${{ env.IMAGE }}:${{ matrix.version }}-${{ matrix.platform.arch }}
           push: true
-          # OCI standard image-source / image-description labels +
-          # a project-namespaced label for the qiskit patch version.
-          # The base image (jupyter/base-notebook → ubuntu) ships
-          # its own `org.opencontainers.image.version` value (the
-          # Ubuntu release, e.g. "24.04"), so a same-name override
-          # is fragile and confusing. Use a dedicated key instead.
-          # build-pages-data.py reads org.qubins.qiskit.patch from
-          # the image config blob and surfaces it in versions.json.
+          # OCI standard labels + a project-namespaced label for the
+          # qiskit patch version.
+          #
+          # image.version is set to the qiskit patch deliberately. Left
+          # alone it inherits the base image's value -- the Ubuntu
+          # release, "24.04" -- which is simply un-overridden leakage
+          # from jupyter/base-notebook, not a statement about this
+          # image. The OCI spec defines the key as the version of the
+          # *packaged software*, which here is Qiskit, and Artifact Hub
+          # surfaces it publicly as the package version, where "24.04"
+          # on a Qiskit image would be actively wrong.
+          #
+          # org.qubins.qiskit.patch stays and keeps the same value:
+          # build-pages-data.py reads that key (and deliberately not
+          # image.version, precisely because it used to be Ubuntu's),
+          # so nothing downstream changes.
+          #
+          # The io.artifacthub.* labels and image.created are what let
+          # Artifact Hub index these images at all: readme-url and
+          # created are mandatory there, the rest shape the listing.
+          # They are plain OCI labels, so they cost nothing and are
+          # equally useful to anyone inspecting the image directly.
           labels: |
             org.qubins.qiskit.patch=${{ steps.qversion.outputs.patch }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=QuBins ${{ matrix.version }} — prebuilt Qiskit ${{ steps.qversion.outputs.patch }} environment
+            org.opencontainers.image.created=${{ steps.qversion.outputs.created }}
+            org.opencontainers.image.version=${{ steps.qversion.outputs.patch }}
+            io.artifacthub.package.license=Apache-2.0
+            org.opencontainers.image.title=QuBins ${{ matrix.version }}
+            org.opencontainers.image.url=https://qubins.org/
+            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}#readme
+            org.opencontainers.image.vendor=QuBins
+            io.artifacthub.package.readme-url=https://raw.githubusercontent.com/${{ github.repository }}/main/README.md
+            io.artifacthub.package.category=skip-prediction
+            io.artifacthub.package.keywords=qiskit,quantum,quantum-computing,jupyter,notebook,binder,mybinder
           # All layers are cache hits from the previous step, so this
           # is fast; the work it does is producing the registry push +
           # SLSA provenance attestation that load: true can't generate.

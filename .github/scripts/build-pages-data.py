@@ -224,10 +224,15 @@ def fetch_image_meta(tag: str) -> dict:
     # for images built before that step landed, the label is absent
     # and we just omit qiskit_patch.
     #
-    # We deliberately don't read `org.opencontainers.image.version`:
-    # the inherited base image (jupyter/base-notebook → ubuntu) sets
-    # its own value (the Ubuntu release) under that key, so reading
-    # it would silently surface "24.04" as the "qiskit version".
+    # We read `org.qubins.qiskit.patch` rather than
+    # `org.opencontainers.image.version`. Both now carry the qiskit
+    # patch -- the build-matrix workflow sets image.version explicitly
+    # so Artifact Hub shows something meaningful -- but only images
+    # built after that change do. Older published images still have
+    # the inherited base value there (the Ubuntu release, "24.04"),
+    # so reading image.version would surface "24.04" as the qiskit
+    # version for anything older. The namespaced key has never meant
+    # anything else, so it stays the one we trust.
     config_digest = (manifest.get("config") or {}).get("digest")
     if config_digest:
         config = _ghcr_get(f"blobs/{config_digest}", "application/json")
