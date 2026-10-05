@@ -93,15 +93,14 @@ the scientific stack is unpinned and resolved by pip.
 
 </details>
 
-Older Qiskit minors `1.0`/`1.1`/`1.2`/`1.3` are no longer published.
-They carried unfixable QPY-deserialisation CVEs (RCE in `< 1.4.2`,
+Qiskit 1.x is no longer published. `1.0`–`1.3` were dropped first:
+they carried unfixable QPY-deserialisation CVEs (RCE in `< 1.4.2`,
 DoS in `< 1.3.0`) and were holding the base image back to a
-python-3.12 stream with a much larger CVE backlog. Use `1.4` if you
-need a 1.x environment, or one of the 2.x tags for any new work.
-
-`1.4-xl` is a reduced set: `qiskit-addon-*`, `qiskit-serverless`,
-`qiskit-ibm-catalog`, and `qiskit-ibm-transpiler` are 2.x-only and not
-included.
+python-3.12 stream with a much larger CVE backlog. `1.4` followed
+once Qiskit 1.x reached end-of-life and stopped receiving fixes,
+including security fixes ([#162](https://github.com/QuBins/qiskit-images/issues/162)).
+Already-published `1.4-*` tags stay pullable but are no longer rebuilt
+or patched; use one of the 2.x tags.
 
 ## Launch your repo or notebook on QuBins
 

@@ -69,7 +69,7 @@ COPY versions /tmp/versions
 # Base digest 4ef9cfd5 (Ubuntu 26.04.1) is clean for all of these --
 # it ships msgpack 1.2.2, urllib3 2.8.0 and setuptools 84.0.0. The
 # problem is that OUR OWN requirements install, which runs after it,
-# drags them back down: the 1.4-small image came out with msgpack
+# drags them back down: the (since retired) 1.4-small image came out with msgpack
 # 1.1.2, urllib3 2.7.0 and setuptools 70.3.0, all flagged by Trivy.
 #
 # That is why this step runs AFTER the requirements install rather

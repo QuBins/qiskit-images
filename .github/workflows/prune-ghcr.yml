@@ -2,8 +2,8 @@ name: Prune GHCR versions
 
 # Garbage-collect GHCR container versions that nothing points at.
 #
-# Every nightly Build matrix run republishes all 17 flavors and mints
-# ~144 brand-new versions (see the header of
+# Every nightly Build matrix run republishes all 15 flavors and mints
+# ~128 brand-new versions (see the header of
 # .github/scripts/prune-ghcr-versions.py for the full accounting).
 # Nothing has ever pruned them, so the package grows without bound —
 # which is what trips build-admin-stats.py's paging guard and silently

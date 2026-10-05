@@ -104,7 +104,6 @@ jobs:
             '2.2-small' '2.2-xl'
             '2.1-small' '2.1-xl' '2.1-xl-rise'
             '2.0-small' '2.0-xl'
-            '1.4-small' '1.4-xl'
           )
           to_json_array() {
             printf '%s\n' "$@" | jq -R . | jq -sc .

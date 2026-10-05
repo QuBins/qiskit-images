@@ -196,12 +196,12 @@
 
   // ---------------------------------------------------------------- filters
   // Catalog defaults to showing only `latest` (= the rows currently
-  // tagged is_latest). The full 14-row table is one dropdown selection
+  // tagged is_latest). The full table is one dropdown selection
   // or one "Show all versions" click away.
   //
   // The minor dropdown carries a special `latest` value that maps to
   // tr.dataset.latest === "true" rather than a literal minor match,
-  // so the dropdown shows: All / latest / 2.4 / 2.3 / ... / 1.4.
+  // so the dropdown shows: All / latest / 2.5 / 2.4 / ... / 2.0.
   function populateFilters(images, latest) {
     const minorSel = document.getElementById("filter-minor");
     // Insert "latest" as the first option after "All" so it's the
