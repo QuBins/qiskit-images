@@ -76,11 +76,6 @@ _OPENER = urllib.request.build_opener(_SafeRedirectHandler)
 # Hand-maintained notes per image (mirrors the README footnotes).
 # Empty if no special note applies.
 NOTES: dict[tuple[str, str], str] = {
-    ("1.4", "xl"): (
-        "Reduced package set: qiskit-addon-*, qiskit-serverless, "
-        "qiskit-ibm-catalog, and qiskit-ibm-transpiler are 2.x-only "
-        "and not included."
-    ),
     ("2.4", "xxl"): (
         "Everything in xl plus qiskit-ibm-transpiler[ai-local-mode], "
         "which pulls PyTorch + the full CUDA 13 wheelset (~3.4 GB "

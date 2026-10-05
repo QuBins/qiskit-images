@@ -3,20 +3,20 @@
 
 WHY THIS EXISTS
 ---------------
-Every nightly Build matrix run republishes all 17 flavors, and each
+Every nightly Build matrix run republishes all 15 flavors, and each
 publish mints brand-new GHCR "versions":
 
-  * 34 per-arch pushes (17 flavors x 2 arches). Provenance attestation
+  * 30 per-arch pushes (15 flavors x 2 arches). Provenance attestation
     is enabled, so `docker/build-push-action` pushes an OCI *index*
     rather than a plain manifest: the index carries the
     `<version>-<arch>` tag and points at two UNTAGGED children -- the
     image manifest and the provenance attestation manifest. That is
-    3 versions per push, so 102.
-  *      17 parent multi-arch manifests (`imagetools create`).
+    3 versions per push, so 90.
+  *      15 parent multi-arch manifests (`imagetools create`).
   *       4 `latest-*` alias indexes (latest-small/-xl/-xxl + latest).
-  *      21 cosign `.sig` tags, one per published tag.
+  *      19 cosign `.sig` tags, one per published tag.
 
-~144 new versions per night. They are new every night even when no
+~128 new versions per night (~144 before 1.4 was retired in #162). They are new every night even when no
 layer changed, because the provenance attestation embeds build
 timestamps -- a different attestation digest means a different index
 digest means a new version.
