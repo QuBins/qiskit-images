@@ -46,6 +46,16 @@ RUN apt-get update \
 #    adding the binaries fixed 6 outright (the other 10 then failed for
 #    unrelated reasons). ~10 MB, and it is a pure runtime dependency of
 #    code qiskit already ships.
+#  - libgvplugin-neato-layout8: from Ubuntu 26.04 (graphviz 14) the
+#    `graphviz` package ships only the `dot` layout engine; neato, fdp,
+#    sfdp, circo, twopi and osage moved to this split-out plugin, and
+#    --no-install-recommends does not pull it. Without it
+#    `plot_gate_map`/`plot_coupling_map` (neato) and the addon drawers
+#    (circo) fail with "There is no layout engine support for neato".
+#    The base bump in #156 regressed 13 docs notebooks this way; the
+#    trailing render check makes the next such split fail the build
+#    instead of the notebooks. The `8` is the plugin ABI suffix and will
+#    change with a future graphviz soname bump.
 #
 # small images don't ship nbgitpuller and stay git-less to preserve the
 # "small = small" property, so they get neither. The rise flavor's name
@@ -53,7 +63,9 @@ RUN apt-get update \
 # it would ship without both and break nbgitpuller.
 RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl || "${QISKIT_VERSION}" == *-rise ]]; then \
       apt-get update \
-      && apt-get install -y --no-install-recommends git graphviz \
+      && apt-get install -y --no-install-recommends git graphviz libgvplugin-neato-layout8 \
+      && echo 'graph{a--b}' | neato -Tpng >/dev/null \
+      && echo 'graph{a--b}' | circo -Tpng >/dev/null \
       && apt-get clean \
       && rm -rf /var/lib/apt/lists/* ; \
     fi
