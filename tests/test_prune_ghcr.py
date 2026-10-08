@@ -269,6 +269,64 @@ class KeepListTests(unittest.TestCase):
         self.assertEqual(bad, [])
 
 
+class SnapshotRetentionTests(unittest.TestCase):
+    """Monthly immutable snapshot tags (QuBins#167)."""
+
+    def setUp(self):
+        self.mod = _load()
+        self.deleted: list[int] = []
+        today = time.strftime("%Y%m%d", time.gmtime(NOW))
+        old = time.strftime("%Y%m%d", time.gmtime(NOW - 400 * 86400))
+        self.fresh, self.stale = f"2.5-xl-{today}", f"2.4-xl-{old}"
+        reg = dict(_REG)
+        reg[self.fresh] = {}
+        reg[self.stale] = {}
+        tag2dig = dict(_TAG2DIG, **{self.fresh: "sha256:snap_new", self.stale: "sha256:snap_old"})
+        self.mod.registry_token = lambda: "tok"
+        self.mod.fetch_manifest = lambda tok, ref: (
+            (reg[ref], tag2dig.get(ref, ref if ref.startswith("sha256:") else None))
+            if ref in reg else (None, None))
+        self.mod.list_versions = lambda tok: _versions() + [
+            # both are a month+ old by timestamp and reachable from
+            # nothing but their own snapshot tag
+            {"id": 40, "name": "sha256:snap_new", "updated_at": _iso(35),
+             "metadata": {"container": {"tags": [self.fresh]}}},
+            {"id": 41, "name": "sha256:snap_old", "updated_at": _iso(35),
+             "metadata": {"container": {"tags": [self.stale]}}},
+        ]
+        self.mod.delete_version = lambda tok, vid, **kw: self.deleted.append(vid)
+        os.environ["GITHUB_TOKEN"] = "x"
+
+    def _run(self, *extra):
+        sys.argv = ["prune", "--grace-days", "14", "--apply",
+                    "--keep-file", "/nonexistent", *extra]
+        return self.mod.main()
+
+    def test_snapshot_within_retention_is_kept(self):
+        self.assertEqual(self._run(), 0)
+        self.assertNotIn(40, self.deleted)
+
+    def test_snapshot_past_retention_is_collected(self):
+        self.assertEqual(self._run(), 0)
+        self.assertIn(41, self.deleted)
+
+    def test_retention_is_configurable(self):
+        self.assertEqual(self._run("--snapshot-days", "500"), 0)
+        self.assertNotIn(41, self.deleted)
+
+    def test_only_snapshot_shaped_tags_expire(self):
+        got = self.mod.expired_snapshot_tags(
+            ["2.5-xl-20200101", "2.1-xl-rise-20200101", "2.5-xl-amd64",
+             "latest-xl", "experiment-do-not-delete", "sha256-ab.sig",
+             "2.5-xl-2020010"], "2026-10-08", 365)
+        self.assertEqual(got, {"2.5-xl-20200101", "2.1-xl-rise-20200101"})
+
+    def test_retention_boundary(self):
+        got = self.mod.expired_snapshot_tags(
+            ["2.5-xl-20251008", "2.5-xl-20251007"], "2026-10-08", 365)
+        self.assertEqual(got, {"2.5-xl-20251007"})
+
+
 class RateLimitTests(unittest.TestCase):
     """A rate-limited pass must not report success.
 

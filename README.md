@@ -217,6 +217,27 @@ directory readable/writable by that UID or pass
 `--user $(id -u):$(id -g)`. Add `-d` for detached, `--name qubins` to
 allow `docker stop qubins`.
 
+### Pinning an image (downstream projects)
+
+Every tag above is rebuilt nightly to pick up security fixes. Each
+rebuild produces a new digest, and old digests are garbage-collected a
+few days later. **Don't pin a nightly digest**: it will stop pulling.
+
+Instead, pin a **monthly snapshot**. The first nightly of each month
+also publishes `<version>-YYYYMMDD` (for example `2.5-xl-20261101`).
+That tag is never moved and is kept for 12 months, so the tag and its
+digest both stay pullable for a year:
+
+```sh
+docker pull ghcr.io/qubins/images:2.5-xl-20261101
+```
+
+To stay current, bump the pin when a new snapshot appears. The newest
+snapshot for a version is the highest `<version>-YYYYMMDD` in the
+registry's tag list (`/v2/qubins/images/tags/list`). Each snapshot is
+the same image, with the same signature, as that night's `<version>`
+tag, so `cosign verify` (below) works on it too.
+
 ## Pull your own notebook repo (nbgitpuller)
 
 The **xl** images bundle [nbgitpuller](https://github.com/jupyterhub/nbgitpuller),

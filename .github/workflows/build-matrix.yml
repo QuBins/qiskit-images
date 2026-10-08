@@ -730,6 +730,40 @@ jobs:
           tags=("${REPO}:${VERSION}")
           docker buildx imagetools create -t "${REPO}:${VERSION}" "${sources[@]}"
 
+          # Monthly immutable snapshot (QuBins#167). Every nightly moves
+          # every tag, so a digest pinned downstream (RasQberry pins one
+          # per release) is unreachable the next night and pruned after
+          # the grace window. The first scheduled publish of each month
+          # also tags <version>-YYYYMMDD. Nothing ever moves that tag,
+          # and prune-ghcr-versions.py keeps it for --snapshot-days
+          # (365) -- so downstream can pin it, or its digest, for a year.
+          #
+          # Built from the same sources as ${VERSION}, so it is the
+          # byte-identical manifest (imagetools create is deterministic:
+          # latest-* aliases already share their version tag's digest)
+          # and is covered by the signature made below for ${VERSION}.
+          # Monthly, not nightly: ~15 flavors x ~8 registry versions x 12
+          # months is ~1.4k versions, well under the ~5k paging limit
+          # the prune exists to protect. A failed listing only skips the
+          # snapshot for tonight; the next night retries.
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ]; then
+            month="$(date -u +%Y%m)"
+            snap="${VERSION}-$(date -u +%Y%m%d)"
+            path="${REPO#ghcr.io/}"
+            if ptok="$(curl -sf "https://ghcr.io/token?scope=repository:${path}:pull" | jq -er .token)" \
+               && all_tags="$(curl -sf -H "Authorization: Bearer ${ptok}" \
+                    "https://ghcr.io/v2/${path}/tags/list?n=10000" | jq -er '.tags[]')"; then
+              if grep -Eq "^${VERSION//./\\.}-${month}[0-9]{2}\$" <<<"${all_tags}"; then
+                echo "Monthly snapshot for ${VERSION} (${month}) already exists."
+              else
+                docker buildx imagetools create -t "${REPO}:${snap}" "${sources[@]}"
+                echo "Published monthly snapshot ${REPO}:${snap}"
+              fi
+            else
+              echo "::warning::${VERSION}: could not list registry tags; skipping tonight's monthly-snapshot check (retried next night)."
+            fi
+          fi
+
           # If this is the current "latest" Qiskit minor, also publish
           # an alias tag latest-<flavor>. The small flavor additionally
           # gets the bare :latest tag (the docker default).
