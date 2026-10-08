@@ -13,3 +13,10 @@
 # deleted-versions window. Expires when RasQberry has moved to a
 # snapshot tag.
 sha256:a686b45167d42743c90bcd2e32ee10294de39528a5fe37b2651dcdfab3119884  2027-01-31  RasQberry Two beta pin (#167)
+
+# RasQberry Two beta (released 2026-10-08) pins this 2.5-xl nightly in
+# RQB2-config/demo-manifests/rq_demo_quantum-lab.json. Built 2026-10-06,
+# untagged since the next nightly; without this entry the prune would
+# collect it on 2026-10-09. Expires once RasQberry has moved to a
+# monthly snapshot tag (e.g. 2.5-xl-20261008).
+sha256:8eee3ec556aa033c43587984bd201f2c210048ed1c9c5d06ed1b5518086ff328  2027-01-31  RasQberry Two beta pin, 2026-10-08 release (#167)
