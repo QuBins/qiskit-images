@@ -75,6 +75,7 @@ Exit codes: 0 ok, 1 error, 2 refused (floor tripped).
 from __future__ import annotations
 
 import argparse
+import calendar
 import hashlib
 import json
 import os
@@ -374,6 +375,27 @@ def walk_reachable(tok: str, tags: list[str]) -> tuple[set[str], list[str]]:
 #    only warns: it protects nothing, and refusing would let one stale
 #    pin stop all garbage collection.
 
+# Monthly immutable snapshot tags, `<minor>-<flavor>-YYYYMMDD`, published
+# by build-matrix.yml (QuBins#167). They are what downstream should pin
+# instead of a nightly digest. Kept for --snapshot-days; after that the
+# tag stops counting as live and its version is collected like any
+# other unreachable one.
+SNAPSHOT_RE = re.compile(r"^\d+\.\d+-[a-z][a-z-]*-(\d{8})$")
+
+
+def expired_snapshot_tags(tags: list[str], today: str, keep_days: float) -> set[str]:
+    """Snapshot tags older than keep_days, judged by the date in the tag
+    (not the version timestamp, which a restore or re-push can reset)."""
+    cutoff = time.strftime("%Y%m%d", time.gmtime(
+        calendar.timegm(time.strptime(today, "%Y-%m-%d")) - keep_days * 86400))
+    out = set()
+    for t in tags:
+        m = SNAPSHOT_RE.match(t)
+        if m and m.group(1) < cutoff:
+            out.add(t)
+    return out
+
+
 KEEP_FILE = Path(__file__).resolve().parents[1] / "ghcr-keep.txt"
 _KEEP_RE = re.compile(r"^(sha256:[0-9a-f]{64})\s+(\d{4}-\d{2}-\d{2})\s+(\S.*)$")
 
@@ -426,6 +448,8 @@ def main() -> int:
     ap.add_argument("--wait-budget", type=float, default=600.0,
                     help="total seconds this run may spend waiting out "
                          "rate limits before stopping and reporting")
+    ap.add_argument("--snapshot-days", type=float, default=365.0,
+                    help="keep monthly snapshot tags this long")
     ap.add_argument("--keep-file", type=Path, default=KEEP_FILE,
                     help="digests to keep as live roots (see load_keep)")
     args = ap.parse_args()
@@ -450,8 +474,12 @@ def main() -> int:
         tags_by_digest[name] = tl
         live_tags.extend(tl)
     sig_tags = [t for t in live_tags if t.startswith("sha256-") and t.endswith(".sig")]
-    real_tags = [t for t in live_tags if t not in set(sig_tags)]
-    print(f"  {len(real_tags)} real tags, {len(sig_tags)} cosign signature tags")
+    expired_snaps = expired_snapshot_tags(
+        live_tags, time.strftime("%Y-%m-%d", time.gmtime(now)), args.snapshot_days)
+    real_tags = [t for t in live_tags if t not in set(sig_tags) and t not in expired_snaps]
+    n_snaps = sum(1 for t in live_tags if SNAPSHOT_RE.match(t))
+    print(f"  {len(real_tags)} real tags, {len(sig_tags)} cosign signature tags, "
+          f"{n_snaps} snapshot tags ({len(expired_snaps)} past {args.snapshot_days:g}d)")
 
     print("Walking reachability from live tags ...")
     reachable, unresolved = walk_reachable(registry_token(), real_tags)
@@ -521,7 +549,7 @@ def main() -> int:
             keep.append((v, "reachable"))
         elif age < args.grace_days:
             keep.append((v, "within grace"))
-        elif tl and not set(tl) <= orphan_sig_tags:
+        elif tl and not set(tl) <= (orphan_sig_tags | expired_snaps):
             keep.append((v, "tagged"))
         else:
             candidates.append((v, tl, age))
