@@ -1,0 +1,15 @@
+# Digests the daily GHCR prune must keep, even though no live tag points
+# at them any more. Read by .github/scripts/prune-ghcr-versions.py.
+#
+#   sha256:<64 hex>  YYYY-MM-DD(expiry, inclusive)  reason
+#
+# Every entry expires: this is for bridging a downstream pin until it
+# moves to a supported tag, not a second retention policy. Children of a
+# listed index (per-arch manifests, attestations) are kept automatically.
+# A malformed line makes the prune refuse to run.
+
+# RasQberry Two beta pins this Quantum Lab image (QuBins#167). It was
+# built 2026-10-02 and pruned 2026-10-06; restored from GHCR's 30-day
+# deleted-versions window. Expires when RasQberry has moved to a
+# snapshot tag.
+sha256:a686b45167d42743c90bcd2e32ee10294de39528a5fe37b2651dcdfab3119884  2027-01-31  RasQberry Two beta pin (#167)

@@ -191,6 +191,84 @@ class PruneSafetyTests(unittest.TestCase):
         self.assertEqual(len(self.deleted), 1)
 
 
+PIN = "sha256:" + "a" * 64
+
+
+class KeepListTests(unittest.TestCase):
+    """Digest pins downstream depends on (QuBins#167)."""
+
+    def setUp(self):
+        import tempfile
+        self.mod = _load()
+        self.deleted: list[int] = []
+        self.tmp = Path(tempfile.mkdtemp())
+        self.mod.registry_token = lambda: "tok"
+        reg = dict(_REG)
+        # An old, untagged, otherwise-collectable index with one child:
+        # what a nightly rebuild leaves behind for a pinned digest.
+        reg[PIN] = {"manifests": [{"digest": "sha256:pin_child"}]}
+        reg["sha256:pin_child"] = {}
+        self.mod.fetch_manifest = lambda tok, ref: (
+            (reg[ref], _TAG2DIG.get(ref, ref if ref.startswith("sha256:") else None))
+            if ref in reg else (None, None))
+        self.mod.list_versions = lambda tok: _versions() + [
+            {"id": 30, "name": PIN, "updated_at": _iso(50),
+             "metadata": {"container": {"tags": []}}},
+            {"id": 31, "name": "sha256:pin_child", "updated_at": _iso(50),
+             "metadata": {"container": {"tags": []}}},
+        ]
+        self.mod.delete_version = lambda tok, vid, **kw: self.deleted.append(vid)
+        os.environ["GITHUB_TOKEN"] = "x"
+
+    def _run(self, keep_text: str | None):
+        kf = self.tmp / "keep.txt"
+        if keep_text is None:
+            kf = self.tmp / "absent.txt"
+        else:
+            kf.write_text(keep_text, encoding="utf-8")
+        sys.argv = ["prune", "--grace-days", "14", "--apply", "--keep-file", str(kf)]
+        return self.mod.main()
+
+    def test_without_keep_list_the_pin_is_collected(self):
+        """The 2026-10-06 RasQberry breakage, reproduced."""
+        self.assertEqual(self._run(None), 0)
+        self.assertIn(30, self.deleted)
+        self.assertIn(31, self.deleted)
+
+    def test_kept_index_and_its_children_survive(self):
+        self.assertEqual(self._run(f"# pins\n{PIN}  2099-01-01  test pin\n"), 0)
+        self.assertNotIn(30, self.deleted)
+        self.assertNotIn(31, self.deleted, "kept the index but not its child")
+        self.assertEqual(sorted(self.deleted), [21, 22, 23])  # normal GC unaffected
+
+    def test_expired_entry_no_longer_protects(self):
+        self.assertEqual(self._run(f"{PIN}  2000-01-01  old pin\n"), 0)
+        self.assertIn(30, self.deleted)
+
+    def test_malformed_line_refuses_the_whole_run(self):
+        self.assertEqual(self._run(f"{PIN[:20]}  2099-01-01  truncated digest\n"), 2)
+        self.assertEqual(self.deleted, [])
+
+    def test_unresolvable_pin_only_warns(self):
+        gone = "sha256:" + "b" * 64
+        self.assertEqual(self._run(f"{gone}  2099-01-01  already deleted\n"), 0)
+        self.assertEqual(sorted(self.deleted), [21, 22, 23, 30, 31])
+
+    def test_load_keep_expiry_is_inclusive(self):
+        kf = self.tmp / "k.txt"
+        kf.write_text(f"{PIN}  2026-10-08  today\n", encoding="utf-8")
+        active, expired, bad = self.mod.load_keep(kf, "2026-10-08")
+        self.assertEqual((active, expired, bad), ([PIN], [], []))
+        active, expired, _ = self.mod.load_keep(kf, "2026-10-09")
+        self.assertEqual(active, [])
+        self.assertEqual(len(expired), 1)
+
+    def test_repo_keep_file_is_well_formed(self):
+        """The committed list must never be the thing that stops the GC."""
+        _a, _e, bad = self.mod.load_keep(self.mod.KEEP_FILE, "2026-01-01")
+        self.assertEqual(bad, [])
+
+
 class RateLimitTests(unittest.TestCase):
     """A rate-limited pass must not report success.
 

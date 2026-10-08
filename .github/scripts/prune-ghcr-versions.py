@@ -78,10 +78,12 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from urllib.parse import urlsplit
 
 GH_ORG = "QuBins"
@@ -351,6 +353,53 @@ def walk_reachable(tok: str, tags: list[str]) -> tuple[set[str], list[str]]:
     return seen, unresolved
 
 
+# ------------------------------------------------------------- keep-list
+#
+# Downstream projects pin images by digest (RasQberry pins the Quantum
+# Lab image in each release, QuBins#167). A nightly rebuild moves every
+# tag, so a pinned digest becomes unreachable and is collected once the
+# grace window passes -- which broke RasQberry's beta on 2026-10-06.
+#
+# .github/ghcr-keep.txt lists digests to treat as live roots, with an
+# expiry so the list cannot grow into a second unbounded retention
+# policy. Their children are kept too (an index without its per-arch
+# manifests does not pull).
+#
+#   sha256:<64 hex>  YYYY-MM-DD  free-text reason
+#
+# Safety asymmetry, deliberately:
+#  - a MALFORMED line refuses the run: a typo must never silently drop
+#    protection for an image someone depends on;
+#  - an entry that does not RESOLVE (already gone, or not restored yet)
+#    only warns: it protects nothing, and refusing would let one stale
+#    pin stop all garbage collection.
+
+KEEP_FILE = Path(__file__).resolve().parents[1] / "ghcr-keep.txt"
+_KEEP_RE = re.compile(r"^(sha256:[0-9a-f]{64})\s+(\d{4}-\d{2}-\d{2})\s+(\S.*)$")
+
+
+def load_keep(path: Path, today: str) -> tuple[list[str], list[str], list[str]]:
+    """(active digests, expired lines, malformed lines). `today` is
+    YYYY-MM-DD; an entry is active up to and including its expiry."""
+    active, expired, bad = [], [], []
+    if not path.is_file():
+        return active, expired, bad
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        m = _KEEP_RE.match(line)
+        if not m:
+            bad.append(line)
+            continue
+        digest, expiry, _reason = m.groups()
+        if expiry >= today:
+            active.append(digest)
+        else:
+            expired.append(line)
+    return active, expired, bad
+
+
 # ------------------------------------------------------------------ main
 
 
@@ -377,6 +426,8 @@ def main() -> int:
     ap.add_argument("--wait-budget", type=float, default=600.0,
                     help="total seconds this run may spend waiting out "
                          "rate limits before stopping and reporting")
+    ap.add_argument("--keep-file", type=Path, default=KEEP_FILE,
+                    help="digests to keep as live roots (see load_keep)")
     args = ap.parse_args()
 
     token = os.environ.get("GITHUB_TOKEN", "")
@@ -429,6 +480,25 @@ def main() -> int:
         print("A GC must not delete on an incomplete picture. Re-run once the "
               "registry answers for every tag.", file=sys.stderr)
         return 2
+
+    keep_roots, keep_expired, keep_bad = load_keep(
+        args.keep_file, time.strftime("%Y-%m-%d", time.gmtime(now)))
+    if keep_bad:
+        print(f"\nREFUSING: {len(keep_bad)} malformed line(s) in {args.keep_file}:",
+              file=sys.stderr)
+        for line in keep_bad[:10]:
+            print(f"  {line}", file=sys.stderr)
+        print("Expected: sha256:<64 hex>  YYYY-MM-DD  reason", file=sys.stderr)
+        return 2
+    for line in keep_expired:
+        print(f"  note: keep-list entry expired, no longer protected: {line}")
+    if keep_roots:
+        kept, gone = walk_reachable(registry_token(), keep_roots)
+        new = kept - reachable
+        reachable |= kept
+        print(f"  {len(keep_roots)} keep-list root(s): {len(new)} extra digest(s) protected")
+        for d in gone:
+            print(f"  warning: keep-list digest does not resolve (gone?): {d}")
 
     # A cosign signature's subject is encoded in its tag:
     #   sha256-<hex>.sig  ->  sha256:<hex>
