@@ -65,6 +65,7 @@
     // Wire best-effort click tracking so we can see which intro people
     // actually open. The links work without JS; this only adds analytics.
     for (const [id, example] of [
+      ["ex-qubits", "qubits"],
       ["ex-first-program", "first-program"],
       ["ex-coin-game", "coin-game"],
     ]) {
@@ -273,20 +274,23 @@
   }
 
   // ----------------------------------------------------- generator dropdown
-  // Single image picker for the consolidated launch form. Each <option>
-  // carries a data-flavor attribute so we can mark small options as
-  // disabled when the form switches into single-file mode (the
-  // jupyterlab-open-url-parameter extension ships in xl and, via the
-  // xl include, in xxl — but not in small).
+  // Single image picker for the consolidated launch form. The form
+  // always loads a repo (nbgitpuller + git) or a single notebook
+  // (jupyterlab-open-url-parameter), and small images ship neither, so
+  // small is not offered here at all; it stays one click away in the
+  // catalog for bare launches. An xxl whose AI transpiler is disabled
+  // (ai_transpiler false: same content as its xl) is left out too, so
+  // nobody picks it expecting the transpiler.
   function populateGeneratorImages(images, latest) {
     const sel = document.getElementById("launch-image");
     if (!sel) return;
+    const usable = (img) =>
+      img.flavor === "xl" || (img.flavor === "xxl" && img.ai_transpiler !== false);
     const hasXxl = images.some(
-      (img) => img.qiskit_minor === latest && img.flavor === "xxl",
+      (img) => img.qiskit_minor === latest && img.flavor === "xxl" && usable(img),
     );
     const options = [
-      { value: "latest-xl",    label: `latest-xl (=${latest}-xl)`,    flavor: "xl" },
-      { value: "latest-small", label: `latest-small (=${latest}-small)`, flavor: "small" },
+      { value: "latest-xl", label: `latest-xl (=${latest}-xl)`, flavor: "xl" },
     ];
     if (hasXxl) {
       options.push({
@@ -296,6 +300,7 @@
       });
     }
     for (const img of images) {
+      if (!usable(img)) continue;
       options.push({ value: img.binder_tag, label: img.binder_tag, flavor: img.flavor });
     }
     for (const o of options) {
@@ -389,15 +394,13 @@
 
   // Apply a detection result to the form: split a /blob/ URL into its
   // pieces (matching the previous maybeSplitFullRepoUrl behaviour),
-  // show/hide Branch + Path, set the mode note, and gate out the
-  // small image when in file mode (xl/xxl carry the ?fromURL= ext).
+  // show/hide Branch + Path, and set the mode note.
   function applyDetection(det) {
     const urlField    = document.getElementById("launch-url");
     const branchField = document.getElementById("launch-branch");
     const pathField   = document.getElementById("launch-path");
     const cloneFields = document.getElementById("launch-clone-fields");
     const note        = document.getElementById("launch-mode-note");
-    const imageSel    = document.getElementById("launch-image");
 
     const effectiveMode =
       overrideMode ||
@@ -414,17 +417,6 @@
 
     // Show clone-only fields only in clone mode.
     cloneFields.hidden = effectiveMode !== "clone";
-
-    // File mode needs jupyterlab-open-url-parameter, which ships in xl
-    // and (via the xl include) xxl, but not small. Disable small only.
-    for (const opt of imageSel.options) {
-      const disabled =
-        effectiveMode === "file" && opt.dataset.flavor === "small";
-      opt.disabled = disabled;
-    }
-    if (effectiveMode === "file" && imageSel.selectedOptions[0]?.disabled) {
-      imageSel.value = "latest-xl";
-    }
 
     // Symmetric mode note + toggle. The form has two launch shapes:
     //   - clone-the-whole-repo (nbgitpuller)
@@ -593,9 +585,9 @@
 
   // ------------------------------------------------------------------ utils
   function formatSize(mb) {
-    // Show MB up to ~1 GB, then GB with one decimal. Image sizes
-    // here range from ~250 MB (small) through ~1 GB (xl) to
-    // ~3.4 GB (xxl, torch + CUDA).
+    // Show MB up to ~1 GB, then GB with one decimal. Download sizes
+    // here range from ~0.4 GB (small) through ~0.9 GB (xl) to
+    // ~4 GB (2.4-xxl amd64, torch + CUDA).
     if (mb < 1024) return `${Math.round(mb)} MB`;
     return `${(mb / 1024).toFixed(1)} GB`;
   }

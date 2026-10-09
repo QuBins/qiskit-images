@@ -78,11 +78,35 @@ _OPENER = urllib.request.build_opener(_SafeRedirectHandler)
 NOTES: dict[tuple[str, str], str] = {
     ("2.4", "xxl"): (
         "Everything in xl plus qiskit-ibm-transpiler[ai-local-mode], "
-        "which pulls PyTorch + the full CUDA 13 wheelset (~3.4 GB "
-        "total). The AI transpiler bits are amd64-only (no aarch64 "
-        "wheels). Use xl unless you need the local AI transpiler."
+        "which pulls PyTorch + the full CUDA 13 wheelset (~4 GB "
+        "download). The AI transpiler is amd64-only (no aarch64 "
+        "wheels): the arm64 build of this tag has the same content as "
+        "xl. Use xl unless you need the local AI transpiler."
     ),
 }
+
+# An xxl whose requirements file has the transpiler line commented out
+# (2.5: the transpiler can't import on that Qiskit minor) has the same
+# content as its xl. Detect that from the file rather than a hand note,
+# so the site stops advertising it the moment the line is restored.
+TRANSPILER_RE = re.compile(r"^\s*qiskit-ibm-transpiler\b", re.MULTILINE)
+
+
+def has_ai_transpiler(minor: str, flavor: str) -> bool:
+    if flavor != "xxl":
+        return False
+    req = VERSIONS_DIR / f"{minor}-{flavor}" / "requirements.txt"
+    return bool(TRANSPILER_RE.search(req.read_text()))
+
+
+def xxl_without_transpiler_note(minor: str, fallback: str | None) -> str:
+    note = (
+        f"Currently the same content as {minor}-xl: the local AI "
+        f"transpiler does not support Qiskit {minor} yet."
+    )
+    if fallback:
+        note += f" For the AI transpiler use {fallback}-xxl (amd64)."
+    return note
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VERSIONS_DIR = REPO_ROOT / "versions"
@@ -248,9 +272,17 @@ def fetch_image_meta(tag: str) -> dict:
 
 def main() -> None:
     latest = latest_qiskit()
+    entries = discover_versions()
+    # Newest minor whose xxl really carries the transpiler (entries are
+    # newest-first), for the pointer in the no-transpiler note.
+    transpiler_minor = next(
+        (e["qiskit_minor"] for e in entries
+         if has_ai_transpiler(e["qiskit_minor"], e["flavor"])),
+        None,
+    )
     out: list[dict] = []
     enriched = 0
-    for entry in discover_versions():
+    for entry in entries:
         minor = entry["qiskit_minor"]
         flavor = entry["flavor"]
         tag = f"{minor}-{flavor}"
@@ -262,6 +294,10 @@ def main() -> None:
             "docker_tag": f"{DOCKER_PREFIX}:{tag}",
         }
         note = NOTES.get((minor, flavor))
+        if flavor == "xxl":
+            item["ai_transpiler"] = has_ai_transpiler(minor, flavor)
+            if not item["ai_transpiler"]:
+                note = xxl_without_transpiler_note(minor, transpiler_minor)
         if note:
             item["notes"] = note
         meta = fetch_image_meta(tag)

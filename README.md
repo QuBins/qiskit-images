@@ -58,13 +58,16 @@ Three flavors:
   `qiskit-aer` + `qiskit-ibm-runtime`). (Every Qiskit minor.)
 - **`xxl`** — everything in `xl` plus
   `qiskit-ibm-transpiler[ai-local-mode]`, which pulls PyTorch and the
-  full CUDA 13 wheelset (~3.4 GB, amd64-only). Only where the AI
-  transpiler is applicable — introduced at `2.4`. Use `xl` unless you
-  specifically need the local AI transpiler.
+  full CUDA 13 wheelset (~4 GB download). Introduced at `2.4`. **For
+  now only `2.4-xxl` has the transpiler:** it doesn't support Qiskit 2.5
+  yet, so `2.5-xxl` (and `latest-xxl`) has the same content as `2.5-xl`
+  until it does. The transpiler is amd64-only, so every xxl's arm64 build
+  also equals xl. Use `xl` unless you specifically need the local AI
+  transpiler.
 
-Currently published: 12 multi-arch (amd64 + arm64) images — 6 Qiskit
-minors × {small, xl} — plus 1 amd64-only `xxl` image, plus 1
-special-purpose multi-arch `2.1-xl-rise` image, for 14 total. The
+Currently published: 15 multi-arch (amd64 + arm64) images — 6 Qiskit
+minors × {small, xl}, plus `2.4-xxl` and `2.5-xxl`, plus the
+special-purpose `2.1-xl-rise`. The
 latter is a bridge flavor (`2.1-xl` + the classic Notebook frontend +
 classic RISE) for slideshow notebooks whose interactive ipywidgets need
 classic RISE to render; launch it with `&ui=rise-classic`. It retires
@@ -81,11 +84,11 @@ notebooks from the Qiskit documentation site should run unmodified.
 
 | | **small** | **xl** | **xxl** |
 | - | - | - | - |
-| Use for | Lean image, fast pull, core Qiskit work | Tutorials, docs notebooks, addons, scientific stack *(the usual pick)* | Everything in xl plus the local AI transpiler |
-| Approx. size | ~250 MB | ~1 GB | ~3.4 GB |
+| Use for | Lean image, fast pull, core Qiskit work | Tutorials, docs notebooks, addons, scientific stack *(the usual pick)* | Everything in xl plus the local AI transpiler (currently `2.4-xxl` only) |
+| Approx. download | ~0.4 GB | ~0.9 GB | ~4 GB (amd64) |
 | Includes | `qiskit` <br> `qiskit-aer` <br> `qiskit-ibm-runtime` | **Qiskit ecosystem:** `qiskit[all]`, all `qiskit-addon-*`, `qiskit-experiments`, `qiskit-serverless`, `qiskit-ibm-catalog` <br> **Scientific stack:** scipy, sklearn, pyscf, plotly, sympy, ffsim, pandas <br> **Notebook tooling:** `pylatexenc`, `nbgitpuller`, `jupyterlab-open-url-parameter` | Everything in **xl**, plus `qiskit-ibm-transpiler[ai-local-mode]` (pulls PyTorch + the full CUDA 13 wheelset) |
-| Single-notebook `?fromURL=` | — | ✓ | ✓ (inherits from xl) |
-| arm64 caveats | none | `gem-suite` omitted (no aarch64 wheels) | amd64-only — the AI transpiler chain has no aarch64 wheels |
+| Load a repo (nbgitpuller) or notebook URL (`?fromURL=`) | — (bare launch only) | ✓ | ✓ (inherits from xl) |
+| arm64 caveats | none | `gem-suite` omitted (no aarch64 wheels) | the AI transpiler is amd64-only, so the arm64 build equals xl |
 
 Qiskit-ecosystem packages are pinned in the xl flavor (xxl reuses
 xl's pins via a pip `-r` include and adds the transpiler pin on top);
@@ -163,8 +166,9 @@ Optional: `&branch=BRANCH`, `&path=path/to/notebook.ipynb`.
 
 - **Whole repo** — the notebook has sibling files (data, images,
   helper modules) or you want a working copy with `git pull` updates
-  available from inside the session. Works with any image. Cold-start
-  cost: image pull + repo clone.
+  available from inside the session. xl and xxl images only (small has
+  no git or nbgitpuller; `/launch/` upgrades a small tag to the same
+  minor's xl). Cold-start cost: image pull + repo clone.
 - **Single notebook by URL** — the notebook is self-contained (only
   standard imports, no relative `open()`). Faster cold start because
   only the `.ipynb` itself is fetched. xl only (needs the

@@ -244,6 +244,14 @@ a:hover {
 .hero-pick {
   margin: 0.25rem 0 1rem 0;
 }
+/* What-to-expect list under the hero: Binder sessions are temporary. */
+.binder-expect {
+  margin: 0.25rem 0 0.75rem 0;
+  padding-left: 1.2rem;
+}
+.binder-expect li {
+  margin: 0.15rem 0;
+}
 
 /* "Or run locally with Docker" block. No longer folded — it's short
    enough to live inline. The label sits on its own line above the
@@ -256,7 +264,7 @@ a:hover {
   font-weight: 500;
 }
 
-/* Featured examples: two ready-made notebooks to click straight into,
+/* Featured examples: ready-made notebooks to click straight into,
    sitting between the hero button and the Docker block. Cards wrap to a
    single column below the breakpoint. Each card is a whole-surface link
    to the /launch/ redirector. */
@@ -367,6 +375,17 @@ td.docker-tag-cell {
 }
 td.docker-tag-cell code {
   margin-right: 0.4rem;
+}
+/* Phone width: stack tag above its Copy button so the catalog table
+   fits without horizontal page scroll. */
+@media (max-width: 560px) {
+  td.docker-tag-cell {
+    white-space: normal;
+  }
+  td.docker-tag-cell code {
+    display: block;
+    margin: 0 0 0.25rem 0;
+  }
 }
 
 .hint {
