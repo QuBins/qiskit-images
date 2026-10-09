@@ -105,20 +105,38 @@
       </span>
     </div>
 
+    <ul class="hint binder-expect">
+      <li><strong>Sessions are temporary.</strong> Nothing is saved: download
+        your notebooks (File &rarr; Download) before you close the tab. An
+        idle session shuts down after about 10 minutes.</li>
+      <li>Memory is limited (1&ndash;2&nbsp;GB), so large simulations can
+        restart the kernel.</li>
+      <li>Stuck on &ldquo;Waiting&rdquo; for more than 3 minutes? Reload the
+        page; mybinder tries another server.
+        <a href="https://mybinder.readthedocs.io/en/latest/about/user-guidelines.html" rel="noopener">mybinder&rsquo;s
+        user guidelines</a></li>
+    </ul>
+
     <div class="examples">
       <p class="examples-label">New here? Open a ready-made notebook in your browser:</p>
       <div class="example-cards">
-        <a class="example-card" id="ex-first-program"
-           href="launch/?image=latest-xl&amp;repo=https://github.com/Qiskit/documentation&amp;branch=main&amp;path=learning/courses/use-a-qc-today/build-and-run-your-first-quantum-program.ipynb"
+        <a class="example-card" id="ex-qubits"
+           href="launch/?image=latest-xl&amp;file=https://raw.githubusercontent.com/Qiskit/documentation/main/learning/courses/basics-of-quantum-information/single-systems/qiskit-implementation.ipynb"
            target="_blank" rel="noopener">
-          <span class="example-title">Build &amp; run your first quantum program</span>
-          <span class="example-desc">Qiskit&rsquo;s official intro tutorial, opened in JupyterLab.</span>
+          <span class="example-title">Qubits, gates and circuits in Qiskit</span>
+          <span class="example-desc">From IBM&rsquo;s <em>Basics of Quantum Information</em> course. Runs entirely in your browser session; no account needed.</span>
         </a>
         <a class="example-card" id="ex-coin-game"
            href="launch/?image=2.1-xl-rise&amp;repo=https://github.com/JanLahmann/Fun-with-Quantum&amp;branch=master&amp;path=Quantum-Coin-Game.ipynb&amp;ui=rise-classic"
            target="_blank" rel="noopener">
           <span class="example-title">Quantum Coin Game</span>
           <span class="example-desc">An interactive slideshow from fun-with-quantum.org.</span>
+        </a>
+        <a class="example-card" id="ex-first-program"
+           href="launch/?image=latest-xl&amp;file=https://raw.githubusercontent.com/Qiskit/documentation/main/learning/courses/use-a-qc-today/build-and-run-your-first-quantum-program.ipynb"
+           target="_blank" rel="noopener">
+          <span class="example-title">Run on a real quantum computer</span>
+          <span class="example-desc">Qiskit&rsquo;s intro tutorial. Needs a free IBM Quantum account for the hardware step; on mybinder, paste your key inline instead of <code>save_account()</code> (see below).</span>
         </a>
       </div>
     </div>
@@ -141,8 +159,11 @@
     <p class="hero-pick">
       <strong>Which flavor?</strong> <code>xl</code> for tutorials,
       addons + scientific stack (the usual pick). <code>small</code>
-      for a lean image with just core Qiskit. <code>xxl</code> adds
-      the AI transpiler (PyTorch + CUDA — large, amd64-only).
+      for a lean image with just core Qiskit (bare launch or Docker;
+      it can&rsquo;t load a repo or notebook URL, so this form offers xl
+      images). <code>xxl</code> adds the local AI transpiler (PyTorch +
+      CUDA, ~4&nbsp;GB, amd64); for now only <code>2.4-xxl</code> has it,
+      because the transpiler does not support Qiskit 2.5 yet.
     </p>
     <p class="hint">
       Paste a GitHub repo URL (or a <code>/blob/</code> URL, or a raw
@@ -159,7 +180,7 @@
         <label class="grow">Repo or notebook URL
           <input type="url" id="launch-url" required
                  placeholder="https://github.com/USER/REPO  or  /blob/  or  raw .ipynb URL"
-                 value="https://github.com/Qiskit/documentation/blob/main/learning/courses/use-a-qc-today/build-and-run-your-first-quantum-program.ipynb">
+                 value="https://raw.githubusercontent.com/Qiskit/documentation/main/learning/courses/basics-of-quantum-information/single-systems/qiskit-implementation.ipynb">
         </label>
       </div>
       <div id="launch-clone-fields">
@@ -235,13 +256,15 @@
             <th>Use for</th>
             <td>Lean image, fast pull, core Qiskit work</td>
             <td>Tutorials, docs notebooks, addons, scientific stack <em>(the usual pick)</em></td>
-            <td>Everything in xl plus the local AI transpiler</td>
+            <td>Everything in xl plus the local AI transpiler &mdash; currently
+              <code>2.4-xxl</code> only (<code>2.5-xxl</code> has the same content
+              as <code>2.5-xl</code> until the transpiler supports Qiskit 2.5)</td>
           </tr>
           <tr>
-            <th>Approx. size</th>
-            <td>~250 MB</td>
-            <td>~1 GB</td>
-            <td>~3.4 GB</td>
+            <th>Approx. download</th>
+            <td>~0.4 GB</td>
+            <td>~0.9 GB</td>
+            <td>~4 GB (amd64)</td>
           </tr>
           <tr>
             <th>Included</th>
@@ -270,8 +293,8 @@
             </td>
           </tr>
           <tr>
-            <th>Single-notebook <code>?fromURL=</code></th>
-            <td>—</td>
+            <th>Load a repo or notebook URL</th>
+            <td>— (bare launch only)</td>
             <td>✓ (via <code>jupyterlab-open-url-parameter</code>)</td>
             <td>✓ (inherits from xl)</td>
           </tr>
@@ -279,7 +302,7 @@
             <th>arm64 caveats</th>
             <td>none</td>
             <td><code>gem-suite</code> omitted (no aarch64 wheels)</td>
-            <td>amd64-only — the AI transpiler chain has no aarch64 wheels</td>
+            <td>the AI transpiler is amd64-only (no aarch64 wheels), so the arm64 build equals xl</td>
           </tr>
         </tbody>
       </table>

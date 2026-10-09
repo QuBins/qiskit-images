@@ -42,7 +42,23 @@
   const branch = params.get("branch");
   const path   = params.get("path");
   const file   = params.get("file");
-  const ui     = params.get("ui");
+  let ui       = params.get("ui");
+
+  // small images ship neither nbgitpuller + git (repo loader) nor
+  // jupyterlab-open-url-parameter (file loader), so a repo or file
+  // launch on one opens a Lab that can't load anything. Older
+  // generator versions produced such links, so upgrade them to the
+  // same minor's xl (snapshot tags keep their date suffix: every
+  // flavor is snapshotted on the same day) and say so on the page.
+  let note = "";
+  if ((repo || file) && /-small(-\d{8})?$/.test(image)) {
+    const upgraded = image.replace(/-small(-\d{8})?$/, "-xl$1");
+    note = `${image} can't load notebooks from a repo or URL, so this opens ${upgraded} instead.`;
+    image = upgraded;
+  }
+  // Classic RISE only ships in the -rise flavor. Every xl/xxl has
+  // jupyterlab-rise, so fall back to that presenter elsewhere.
+  if (ui === "rise-classic" && !/-rise(-\d{8})?$/.test(image)) ui = "rise";
 
   let url;
   if (file) {
@@ -89,6 +105,12 @@
   // Reveal fallback first (in case the redirect is blocked) and only
   // then trigger location.replace. If a browser strips the redirect
   // (rare), the link is already wired.
+  if (note) {
+    const p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = note;
+    document.getElementById("status").appendChild(p);
+  }
   document.getElementById("launch-link").href = url;
   document.getElementById("launch-url").textContent = url;
   document.getElementById("fallback").style.display = "block";
