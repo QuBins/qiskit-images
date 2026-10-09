@@ -22,11 +22,19 @@ USER root
 # floor that could reach it, and no newer base exists -- the
 # 2026-09-29 rebuild is the current one. Ungated on purpose: the CVE
 # is in the base layer, so -small is affected exactly like xl.
+#
+# The trailing rm of logs and caches (here and in the next apt step)
+# keeps the layer byte-identical when the same packages are installed:
+# apt/dpkg logs, the *-old backups and ldconfig's aux-cache carry
+# timestamps or inode data, so without it every rebuild produced a new
+# layer digest and invalidated everything above it. See "Reproducible
+# layers" in build-matrix.yml.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends --only-upgrade \
       libssl3t64 openssl openssl-provider-legacy \
  && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log \
+      /var/cache/ldconfig/aux-cache /var/lib/dpkg/*-old /var/cache/debconf/*-old
 
 # Two apt packages for the xl/xxl/rise flavors:
 #
@@ -67,7 +75,9 @@ RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl || "${QISK
       && echo 'graph{a--b}' | neato -Tpng >/dev/null \
       && echo 'graph{a--b}' | circo -Tpng >/dev/null \
       && apt-get clean \
-      && rm -rf /var/lib/apt/lists/* ; \
+      && rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log \
+           /var/cache/ldconfig/aux-cache /var/lib/dpkg/*-old /var/cache/debconf/*-old \
+           /var/cache/fontconfig/* /root/.cache ; \
     fi
 
 # Copy the whole versions/ tree so pip can resolve the relative
@@ -143,7 +153,7 @@ RUN pip_retry() { \
 # no-ops if a future base drops the package. Drop this whole step once the
 # base/nbclassic ships underscore >= 1.13.8.
 COPY docker/underscore-1.13.8 /tmp/underscore-1.13.8
-RUN us_dir="$(python3 -c 'import os, nbclassic; print(os.path.join(os.path.dirname(nbclassic.__file__), "static/components/underscore"))' 2>/dev/null || true)" \
+RUN us_dir="$(python3 -B -c 'import os, nbclassic; print(os.path.join(os.path.dirname(nbclassic.__file__), "static/components/underscore"))' 2>/dev/null || true)" \
  && if [ -n "${us_dir}" ] && [ -d "${us_dir}" ]; then \
       cp /tmp/underscore-1.13.8/underscore-min.js     "${us_dir}/underscore-min.js" \
       && cp /tmp/underscore-1.13.8/package.json         "${us_dir}/package.json" \
@@ -190,8 +200,9 @@ RUN if [[ "${QISKIT_VERSION}" == *-rise ]]; then \
 # Smoke test: catches wheels that resolve cleanly but break at import
 # time (e.g. a python-version bump where pip picked a wheel that
 # doesn't actually load). Runs at build time so the gate is the
-# build itself.
-RUN python -c 'import qiskit; from qiskit import QuantumCircuit; QuantumCircuit(2).measure_all()'
+# build itself. -B: don't leave .pyc files in this layer (they embed
+# source mtimes, so the layer would differ on every rebuild).
+RUN python -B -c 'import qiskit; from qiskit import QuantumCircuit; QuantumCircuit(2).measure_all()'
 
 USER ${NB_UID}
 WORKDIR /home/${NB_USER}

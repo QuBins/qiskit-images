@@ -268,10 +268,41 @@ jobs:
           - { name: linux/arm64, runner: ubuntu-24.04-arm, arch: arm64 }
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history: the reproducible-layer epoch below is the
+          # date of the last commit touching the image inputs.
+          fetch-depth: 0
 
       - name: Compute lowercase owner
         id: repo
         run: echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      # Reproducible layers. The GHA layer cache is shared by 30
+      # scopes and sits at its 10 GB cap, so most nightlies build cold;
+      # a cold build used to stamp fresh mtimes into every layer, so
+      # even identical content got new digests and every pull (Pis,
+      # mybinder nodes, images built FROM ours) re-downloaded ~545 MB
+      # of a 2.5-xl arm64 image each night (2026-10 measurement: only
+      # the base layers matched between nightlies).
+      #
+      # With SOURCE_DATE_EPOCH pinned to the last commit that touched
+      # an image input, and rewrite-timestamp on both exports below,
+      # file mtimes are clamped to that epoch, and the Dockerfile drops
+      # the logs/caches that carry their own timestamps. Two cold
+      # builds of 2.5-xl came out byte-identical (946 of 946 MB) in a
+      # test run. A layer now changes only when its content does, e.g.
+      # the pip layer when pip resolves a new version of something.
+      #
+      # Side effect: the image config's `created` is that epoch, not
+      # the build time. The build time stays in the
+      # org.opencontainers.image.created label (set at publish), which
+      # build-pages-data.py and Artifact Hub read.
+      - name: Reproducible-layer epoch
+        run: |
+          set -euo pipefail
+          epoch="$(git log -1 --format=%ct -- Dockerfile versions docker)"
+          echo "SOURCE_DATE_EPOCH=${epoch}" >> "$GITHUB_ENV"
+          echo "SOURCE_DATE_EPOCH=${epoch} ($(date -u -d "@${epoch}" +%FT%TZ))"
 
       # The ubuntu-latest / ubuntu-24.04-arm runners ship with ~14 GB
       # of preinstalled toolchains (.NET, Android SDK, Haskell, Swift
@@ -350,11 +381,15 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          build-args: QISKIT_VERSION=${{ matrix.version }}
+          build-args: |
+            QISKIT_VERSION=${{ matrix.version }}
+            SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }}
           platforms: ${{ matrix.platform.name }}
           tags: ghcr.io/${{ steps.repo.outputs.owner_lc }}/${{ env.IMAGE }}:${{ matrix.version }}-${{ matrix.platform.arch }}
-          push: false
-          load: true
+          # = load: true, plus timestamp rewriting (see "Reproducible-
+          # layer epoch"). Same exporter options as the push below, so
+          # the layers Trivy scans are the layers we publish.
+          outputs: type=docker,rewrite-timestamp=true
           # Force re-resolution of the base image on every build so
           # security fixes flow through; the GHA layer cache otherwise
           # pins us to whatever digest was resolved on the first build.
@@ -556,10 +591,14 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          build-args: QISKIT_VERSION=${{ matrix.version }}
+          build-args: |
+            QISKIT_VERSION=${{ matrix.version }}
+            SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }}
           platforms: ${{ matrix.platform.name }}
           tags: ghcr.io/${{ steps.repo.outputs.owner_lc }}/${{ env.IMAGE }}:${{ matrix.version }}-${{ matrix.platform.arch }}
-          push: true
+          # = push: true, plus timestamp rewriting (see "Reproducible-
+          # layer epoch").
+          outputs: type=image,push=true,rewrite-timestamp=true
           # OCI standard labels + a project-namespaced label for the
           # qiskit patch version.
           #

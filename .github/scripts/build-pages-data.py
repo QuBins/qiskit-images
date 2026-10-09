@@ -261,9 +261,14 @@ def fetch_image_meta(tag: str) -> dict:
     if config_digest:
         config = _ghcr_get(f"blobs/{config_digest}", "application/json")
         if config:
-            if config.get("created"):
-                out["updated_at"] = config["created"]
             labels = (config.get("config") or {}).get("Labels") or {}
+            # Build time: the image.created label. The config's own
+            # `created` is the reproducible-layer epoch (last commit to
+            # an image input) since builds pin SOURCE_DATE_EPOCH; it is
+            # only the fallback, for images built before the label.
+            created = labels.get("org.opencontainers.image.created") or config.get("created")
+            if created:
+                out["updated_at"] = created
             patch = labels.get("org.qubins.qiskit.patch")
             if patch:
                 out["qiskit_patch"] = patch
