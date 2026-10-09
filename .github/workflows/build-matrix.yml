@@ -54,9 +54,11 @@ env:
   # Qiskit minor that the :latest-<flavor> tags and latest-<flavor> stub
   # branches alias to. Bump when a new minor ships.
   LATEST_QISKIT: '2.5'
-  # Only main and manual dispatch publish to GHCR or update stub
-  # branches; feature branches build for CI signal but stay sandboxed.
-  PUBLISH: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+  # Only runs on main publish to GHCR or update stub branches, manual
+  # dispatch included: a dispatch from a feature branch builds for CI
+  # signal but stays sandboxed, like a push there. (Before, any dispatch
+  # published, from whatever branch it was started on.)
+  PUBLISH: ${{ github.ref == 'refs/heads/main' }}
 
 jobs:
   # Decide which versions to (re)build for this run. The full matrix is
@@ -264,7 +266,11 @@ jobs:
       matrix:
         version: ${{ fromJSON(needs.plan.outputs.versions) }}
         platform:
-          - { name: linux/amd64, runner: ubuntu-latest,    arch: amd64 }
+          # amd64 is pinned like arm64 already is: ubuntu-latest moves to
+          # a new Ubuntu release on 2026-10-19, and an unannounced host
+          # change (preinstalled toolchains, free disk, Docker version)
+          # should arrive as a deliberate PR, not as a red nightly.
+          - { name: linux/amd64, runner: ubuntu-24.04,     arch: amd64 }
           - { name: linux/arm64, runner: ubuntu-24.04-arm, arch: arm64 }
     steps:
       - uses: actions/checkout@v7
@@ -304,7 +310,7 @@ jobs:
           echo "SOURCE_DATE_EPOCH=${epoch}" >> "$GITHUB_ENV"
           echo "SOURCE_DATE_EPOCH=${epoch} ($(date -u -d "@${epoch}" +%FT%TZ))"
 
-      # The ubuntu-latest / ubuntu-24.04-arm runners ship with ~14 GB
+      # The ubuntu-24.04 / ubuntu-24.04-arm runners ship with ~14 GB
       # of preinstalled toolchains (.NET, Android SDK, Haskell, Swift
       # CodeQL, Boost, etc.) we don't use. The xxl amd64 build (torch +
       # the full CUDA 13 wheelset, ~3.4 GB) bumps the disk-space ceiling
@@ -656,12 +662,13 @@ jobs:
     #
     # `always()` lets us run even when needs.build.result is failure;
     # `!cancelled()` still respects an explicit run cancellation.
-    # PR runs still skip via the branch/dispatch guard. PUBLISH=true
-    # check still applies at the step level inside.
+    # PR and feature-branch runs (dispatched ones included) skip via the
+    # main-only guard. PUBLISH=true check still applies at the step
+    # level inside.
     if: >-
       always() && !cancelled() &&
       needs.plan.outputs.versions != '[]' &&
-      (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

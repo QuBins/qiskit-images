@@ -273,12 +273,12 @@ workflow has three stages:
    The base image is force-pulled so security fixes flow through
    instead of riding on the GHA layer cache. This stage runs on every
    branch.
-2. **publish to GHCR** (only on `main` / `workflow_dispatch`) — re-run
+2. **publish to GHCR** (only on `main`, including manual dispatches started there) — re-run
    the build with `push: true` so `docker/build-push-action` produces
    the SLSA provenance attestation alongside
    `ghcr.io/.../images:<target>-<arch>`. All layers are cache hits
    from step 1, so this is fast.
-3. **manifest + sign** (only on `main` / `workflow_dispatch`) —
+3. **manifest + sign** (only on `main`, including manual dispatches started there) —
    combine the per-arch tags into a multi-arch
    `ghcr.io/.../images:<target>` with `docker buildx imagetools
    create`, sign the manifest with cosign keyless OIDC, then
