@@ -29,12 +29,22 @@ USER root
 # timestamps or inode data, so without it every rebuild produced a new
 # layer digest and invalidated everything above it. See "Reproducible
 # layers" in build-matrix.yml.
+#
+# /usr/bin/pebble is removed as well. Ubuntu 26.04's root filesystem
+# (layer 0 of the base, unchanged in the 2026-10-05 rebuild) ships
+# Canonical's pebble service manager as a loose Go binary, not owned by
+# any dpkg package. Built with Go 1.26.7, it carries CVE-2026-78667 and
+# CVE-2026-97031 (HIGH, fixed in Go 1.26.9; the archive has only
+# 1.26.8), which blocked every image on 2026-10-09. Nothing here runs
+# it -- the entrypoint is tini + start-notebook.py -- so deleting it
+# fixes the finding for real instead of suppressing it.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends --only-upgrade \
       libssl3t64 openssl openssl-provider-legacy \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log \
-      /var/cache/ldconfig/aux-cache /var/lib/dpkg/*-old /var/cache/debconf/*-old
+      /var/cache/ldconfig/aux-cache /var/lib/dpkg/*-old /var/cache/debconf/*-old \
+      /usr/bin/pebble
 
 # Two apt packages for the xl/xxl/rise flavors:
 #
