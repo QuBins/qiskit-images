@@ -15,6 +15,13 @@
 //                          (renders interactive ipywidgets in slides).
 //                          Requires a rise-capable image (e.g. 2.1-xl-rise).
 //   file=<raw url>         single-file loader (jupyterlab-open-url-parameter)
+//   checked=1              skip the tag check (set by "continue anyway")
+//
+// Before redirecting, the tag is checked against ../versions.json, so
+// a typo, a retired minor or a snapshot tag (which has no stub branch,
+// so Binder can't launch it) gets a short page with the alternatives
+// instead of a cryptic mybinder error. The check never blocks a launch
+// it can't decide: if versions.json is slow or missing, we redirect.
 //
 // Precedence: `file` wins over `repo`; if neither, bare image launch
 // (which opens the stub's START-HERE.ipynb).
@@ -45,141 +52,256 @@
   const file   = params.get("file");
   let ui       = params.get("ui");
 
-  // small images ship neither nbgitpuller + git (repo loader) nor
-  // jupyterlab-open-url-parameter (file loader), so a repo or file
-  // launch on one opens a Lab that can't load anything. Older
-  // generator versions produced such links, so upgrade them to the
-  // same minor's xl (snapshot tags keep their date suffix: every
-  // flavor is snapshotted on the same day) and say so on the page.
-  let note = "";
-  if ((repo || file) && /-small(-\d{8})?$/.test(image)) {
-    const upgraded = image.replace(/-small(-\d{8})?$/, "-xl$1");
-    note = `${image} can't load notebooks from a repo or URL, so this opens ${upgraded} instead.`;
-    image = upgraded;
-  }
-  // Classic RISE only ships in the -rise flavor. Every xl/xxl has
-  // jupyterlab-rise, so fall back to that presenter elsewhere.
-  if (ui === "rise-classic" && !/-rise(-\d{8})?$/.test(image)) ui = "rise";
+  // ---------------------------------------------------------- tag check
+  // Returns null when the tag is fine (or can't be judged), otherwise
+  // { text, choices: [{label, image, skipCheck?}], catalog? } for the
+  // interstitial.
+  function checkTag(data) {
+    const images = (data && data.images) || [];
+    if (!images.length) return null;
+    const latest = data.latest_qiskit;
+    const known = new Set(images.map((i) => i.binder_tag));
+    for (const i of images) {
+      if (i.qiskit_minor === latest) known.add(`latest-${i.flavor}`);
+    }
+    if (known.has(image)) return null;
 
-  let url;
-  if (file) {
-    const inner = `lab?fromURL=${encodeURIComponent(file)}`;
-    url = `https://mybinder.org/v2/gh/${REPO}/${image}?urlpath=${encodeURIComponent(inner)}`;
-  } else if (repo) {
-    let repoName = "repo";
-    try {
-      const u = new URL(repo);
-      const parts = u.pathname.replace(/\.git$/, "").split("/").filter(Boolean);
-      repoName = parts[parts.length - 1] || "repo";
-    } catch (_) { /* fall back to default repoName */ }
-    const inner = new URLSearchParams();
-    inner.set("repo", repo);
-    if (branch) inner.set("branch", branch);
-    // Both rise presenters need a concrete notebook; without a path,
-    // fall back to the Lab file browser as before.
-    //   ui=rise         -> jupyterlab-rise (Lab-based standalone presenter)
-    //   ui=rise-classic -> classic Notebook frontend + classic RISE
-    inner.set("urlpath",
-      ui === "rise" && path ? `rise/${repoName}/${path}`
-        : ui === "rise-classic" && path ? `nbclassic/notebooks/${repoName}/${path}`
-        : path ? `lab/tree/${repoName}/${path}`
-        : `lab/tree/${repoName}`);
-    const innerEncoded = encodeURIComponent("git-pull?" + inner.toString());
-    url = `https://mybinder.org/v2/gh/${REPO}/${image}?urlpath=${innerEncoded}`;
+    const latestXl = { label: `Open latest-xl (Qiskit ${latest})`, image: "latest-xl" };
+    const m = image.match(/^(\d+)\.(\d+)-([a-z-]+?)(?:-(\d{8}))?$/);
+    if (m && m[4] && known.has(`${m[1]}.${m[2]}-${m[3]}`)) {
+      const current = `${m[1]}.${m[2]}-${m[3]}`;
+      return {
+        text: `${image} is a monthly snapshot. Snapshots are for pinning with Docker; mybinder can only launch the current build of each image.`,
+        choices: [{ label: `Open ${current} (current build)`, image: current }, latestXl],
+      };
+    }
+    if (m) {
+      const [maj, min] = [Number(m[1]), Number(m[2])];
+      const older = (a, b) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
+      const oldest = images
+        .map((i) => i.qiskit_minor.split(".").map(Number))
+        .reduce((a, b) => (older(b, a) ? b : a));
+      if (older([maj, min], oldest)) {
+        return {
+          text: `Qiskit ${maj}.${min} is end-of-life: its images are no longer rebuilt or patched, and may not launch at all.`,
+          choices: [latestXl, { label: `Continue with ${image} anyway`, image, skipCheck: true }],
+        };
+      }
+    }
+    const sameFlavor = m && m[3] !== "xl" && known.has(`latest-${m[3]}`)
+      ? [{ label: `Open latest-${m[3]}`, image: `latest-${m[3]}` }] : [];
+    return {
+      text: `There is no image called ${image}.`,
+      choices: [latestXl, ...sameFlavor],
+      catalog: true,
+    };
+  }
+
+  function showChoices(problem) {
+    const status = document.getElementById("status");
+    status.textContent = "";
+    const p = document.createElement("p");
+    p.textContent = problem.text;
+    status.appendChild(p);
+    const row = document.createElement("p");
+    row.className = "badge-row";
+    for (const c of problem.choices) {
+      const q = new URLSearchParams(location.search);
+      q.set("image", c.image);
+      if (c.skipCheck) q.set("checked", "1");
+      const a = document.createElement("a");
+      a.className = row.childElementCount ? "button secondary" : "button";
+      a.href = `?${q.toString()}`;
+      a.textContent = c.label;
+      row.append(a, " ");
+    }
+    status.appendChild(row);
+    if (problem.catalog) {
+      const hint = document.createElement("p");
+      hint.className = "hint";
+      const link = document.createElement("a");
+      link.href = "../#catalog";
+      link.textContent = "catalog";
+      hint.append("All available images are listed in the ", link, ".");
+      status.appendChild(hint);
+    }
+    // The tracker loads deferred, so it may not be there yet; this
+    // page waits for a click, so a short retry is enough.
+    const props = { image, problem: problem.catalog ? "unknown" : (problem.choices.some((c) => c.skipCheck) ? "retired" : "snapshot") };
+    const send = (tries) => {
+      try {
+        if (window.umami && typeof window.umami.track === "function") {
+          window.umami.track("QuBins: launch tag problem", props);
+        } else if (tries > 0) {
+          setTimeout(() => send(tries - 1), 200);
+        }
+      } catch (_) { /* analytics is best-effort */ }
+    };
+    send(10);
+  }
+
+  if (params.get("checked") === "1") {
+    launch();
   } else {
-    // Bare launch: open the welcome notebook every stub branch carries
-    // (binder-stub/START-HERE.ipynb) rather than an empty Lab.
-    url = `https://mybinder.org/v2/gh/${REPO}/${image}?urlpath=${encodeURIComponent("lab/tree/START-HERE.ipynb")}`;
+    // Give versions.json a short window; on timeout or error, launch.
+    let decided = false;
+    const timer = setTimeout(() => {
+      if (!decided) { decided = true; launch(); }
+    }, 2000);
+    fetch("../versions.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((data) => {
+        if (decided) return;
+        decided = true;
+        clearTimeout(timer);
+        let problem = null;
+        try { problem = checkTag(data); } catch (_) { problem = null; }
+        if (problem) showChoices(problem);
+        else launch();
+      });
   }
 
-  // Belt-and-braces: never wire a navigation sink to anything whose
-  // origin isn't mybinder.org. With the inputs above this can't fail,
-  // but asserting it here means any future change that weakens the
-  // construction degrades to the safe default instead of silently
-  // becoming an open redirect.
-  try {
-    if (new URL(url).origin !== "https://mybinder.org") {
+  function launch() {
+    // small images ship neither nbgitpuller + git (repo loader) nor
+    // jupyterlab-open-url-parameter (file loader), so a repo or file
+    // launch on one opens a Lab that can't load anything. Older
+    // generator versions produced such links, so upgrade them to the
+    // same minor's xl (snapshot tags keep their date suffix: every
+    // flavor is snapshotted on the same day) and say so on the page.
+    let note = "";
+    if ((repo || file) && /-small(-\d{8})?$/.test(image)) {
+      const upgraded = image.replace(/-small(-\d{8})?$/, "-xl$1");
+      note = `${image} can't load notebooks from a repo or URL, so this opens ${upgraded} instead.`;
+      image = upgraded;
+    }
+    // Classic RISE only ships in the -rise flavor. Every xl/xxl has
+    // jupyterlab-rise, so fall back to that presenter elsewhere.
+    if (ui === "rise-classic" && !/-rise(-\d{8})?$/.test(image)) ui = "rise";
+
+    let url;
+    if (file) {
+      const inner = `lab?fromURL=${encodeURIComponent(file)}`;
+      url = `https://mybinder.org/v2/gh/${REPO}/${image}?urlpath=${encodeURIComponent(inner)}`;
+    } else if (repo) {
+      let repoName = "repo";
+      try {
+        const u = new URL(repo);
+        const parts = u.pathname.replace(/\.git$/, "").split("/").filter(Boolean);
+        repoName = parts[parts.length - 1] || "repo";
+      } catch (_) { /* fall back to default repoName */ }
+      const inner = new URLSearchParams();
+      inner.set("repo", repo);
+      if (branch) inner.set("branch", branch);
+      // Both rise presenters need a concrete notebook; without a path,
+      // fall back to the Lab file browser as before.
+      //   ui=rise         -> jupyterlab-rise (Lab-based standalone presenter)
+      //   ui=rise-classic -> classic Notebook frontend + classic RISE
+      inner.set("urlpath",
+        ui === "rise" && path ? `rise/${repoName}/${path}`
+          : ui === "rise-classic" && path ? `nbclassic/notebooks/${repoName}/${path}`
+          : path ? `lab/tree/${repoName}/${path}`
+          : `lab/tree/${repoName}`);
+      const innerEncoded = encodeURIComponent("git-pull?" + inner.toString());
+      url = `https://mybinder.org/v2/gh/${REPO}/${image}?urlpath=${innerEncoded}`;
+    } else {
+      // Bare launch: open the welcome notebook every stub branch carries
+      // (binder-stub/START-HERE.ipynb) rather than an empty Lab. Not on
+      // a "continue anyway" launch: retired stubs predate the notebook.
+      url = params.get("checked") === "1"
+        ? `https://mybinder.org/v2/gh/${REPO}/${image}`
+        : `https://mybinder.org/v2/gh/${REPO}/${image}?urlpath=${encodeURIComponent("lab/tree/START-HERE.ipynb")}`;
+    }
+
+    // Belt-and-braces: never wire a navigation sink to anything whose
+    // origin isn't mybinder.org. With the inputs above this can't fail,
+    // but asserting it here means any future change that weakens the
+    // construction degrades to the safe default instead of silently
+    // becoming an open redirect.
+    try {
+      if (new URL(url).origin !== "https://mybinder.org") {
+        url = `https://mybinder.org/v2/gh/${REPO}/latest-xl`;
+      }
+    } catch (_) {
       url = `https://mybinder.org/v2/gh/${REPO}/latest-xl`;
     }
-  } catch (_) {
-    url = `https://mybinder.org/v2/gh/${REPO}/latest-xl`;
-  }
 
-  // Reveal fallback first (in case the redirect is blocked) and only
-  // then trigger location.replace. If a browser strips the redirect
-  // (rare), the link is already wired.
-  if (note) {
-    const p = document.createElement("p");
-    p.className = "hint";
-    p.textContent = note;
-    document.getElementById("status").appendChild(p);
-  }
-  document.getElementById("launch-link").href = url;
-  document.getElementById("launch-url").textContent = url;
-  document.getElementById("fallback").style.display = "block";
-
-  // Umami event: which image/mode actually got launched.
-  //
-  // The tracker loads with `defer` from <head>, but this script runs
-  // synchronously at the end of <body> — i.e. *before* deferred
-  // scripts execute — so `window.umami` is never there yet at this
-  // point. (Tracking synchronously here meant zero launches were ever
-  // recorded.) So: poll for the tracker briefly, send the event, give
-  // the beacon a moment to leave (the tracker POSTs with
-  // `keepalive: true`, so it survives the navigation once started),
-  // then redirect. Analytics must never block the launch: a hard
-  // deadline redirects regardless, e.g. when the tracker is blocked.
-  const mode = file ? "file" : (repo ? "repo" : "bare");
-  // Which frontend the repo launch actually resolves to (file wins
-  // over repo, so a file launch is always "lab"). Mirrors the
-  // urlpath ternary above.
-  const dest = !file && repo && path
-    ? (ui === "rise" ? "rise" : ui === "rise-classic" ? "rise-classic" : "lab")
-    : "lab";
-  const eventProps = { image, mode, ui: dest, notebook: (file || path || "") };
-
-  const MIN_DELAY_MS = 400;   // let the user see the destination before the jump
-  const POLL_MS = 50;         // how often to check for window.umami
-  const MAX_WAIT_MS = 1500;   // give up on analytics after this long
-  const BEACON_MS = 250;      // grace period after track() before navigating
-  const started = Date.now();
-
-  let redirected = false;
-  const go = () => {
-    if (redirected) return;
-    redirected = true;
-    location.replace(url);
-  };
-  // Hard deadline: the redirect happens no matter what analytics does.
-  setTimeout(go, MAX_WAIT_MS + BEACON_MS);
-
-  const goAfter = (ms) => {
-    const wait = Math.max(ms, MIN_DELAY_MS - (Date.now() - started));
-    setTimeout(go, wait);
-  };
-
-  const trackThenGo = () => {
-    try {
-      // Family taxonomy v2 (Fun-with-Quantum/family/EVENTS.md): `<Site>: <what happened>`.
-      const p = window.umami.track("QuBins: notebook launch", eventProps);
-      // umami.track returns a promise that settles once the POST is
-      // done; navigate on whichever comes first — that or the grace period.
-      if (p && typeof p.then === "function") {
-        p.then(() => goAfter(0), () => goAfter(0));
-      }
-    } catch (_) { /* analytics is best-effort */ }
-    goAfter(BEACON_MS);
-  };
-
-  const poll = () => {
-    if (redirected) return;
-    if (window.umami && typeof window.umami.track === "function") {
-      trackThenGo();
-    } else if (Date.now() - started < MAX_WAIT_MS) {
-      setTimeout(poll, POLL_MS);
-    } else {
-      go(); // tracker never showed up (blocked / offline / wrong host)
+    // Reveal fallback first (in case the redirect is blocked) and only
+    // then trigger location.replace. If a browser strips the redirect
+    // (rare), the link is already wired.
+    if (note) {
+      const p = document.createElement("p");
+      p.className = "hint";
+      p.textContent = note;
+      document.getElementById("status").appendChild(p);
     }
-  };
-  poll();
+    document.getElementById("launch-link").href = url;
+    document.getElementById("launch-url").textContent = url;
+    document.getElementById("fallback").style.display = "block";
+
+    // Umami event: which image/mode actually got launched.
+    //
+    // The tracker loads with `defer` from <head>, but this script runs
+    // synchronously at the end of <body> — i.e. *before* deferred
+    // scripts execute — so `window.umami` is never there yet at this
+    // point. (Tracking synchronously here meant zero launches were ever
+    // recorded.) So: poll for the tracker briefly, send the event, give
+    // the beacon a moment to leave (the tracker POSTs with
+    // `keepalive: true`, so it survives the navigation once started),
+    // then redirect. Analytics must never block the launch: a hard
+    // deadline redirects regardless, e.g. when the tracker is blocked.
+    const mode = file ? "file" : (repo ? "repo" : "bare");
+    // Which frontend the repo launch actually resolves to (file wins
+    // over repo, so a file launch is always "lab"). Mirrors the
+    // urlpath ternary above.
+    const dest = !file && repo && path
+      ? (ui === "rise" ? "rise" : ui === "rise-classic" ? "rise-classic" : "lab")
+      : "lab";
+    const eventProps = { image, mode, ui: dest, notebook: (file || path || "") };
+
+    const MIN_DELAY_MS = 400;   // let the user see the destination before the jump
+    const POLL_MS = 50;         // how often to check for window.umami
+    const MAX_WAIT_MS = 1500;   // give up on analytics after this long
+    const BEACON_MS = 250;      // grace period after track() before navigating
+    const started = Date.now();
+
+    let redirected = false;
+    const go = () => {
+      if (redirected) return;
+      redirected = true;
+      location.replace(url);
+    };
+    // Hard deadline: the redirect happens no matter what analytics does.
+    setTimeout(go, MAX_WAIT_MS + BEACON_MS);
+
+    const goAfter = (ms) => {
+      const wait = Math.max(ms, MIN_DELAY_MS - (Date.now() - started));
+      setTimeout(go, wait);
+    };
+
+    const trackThenGo = () => {
+      try {
+        // Family taxonomy v2 (Fun-with-Quantum/family/EVENTS.md): `<Site>: <what happened>`.
+        const p = window.umami.track("QuBins: notebook launch", eventProps);
+        // umami.track returns a promise that settles once the POST is
+        // done; navigate on whichever comes first — that or the grace period.
+        if (p && typeof p.then === "function") {
+          p.then(() => goAfter(0), () => goAfter(0));
+        }
+      } catch (_) { /* analytics is best-effort */ }
+      goAfter(BEACON_MS);
+    };
+
+    const poll = () => {
+      if (redirected) return;
+      if (window.umami && typeof window.umami.track === "function") {
+        trackThenGo();
+      } else if (Date.now() - started < MAX_WAIT_MS) {
+        setTimeout(poll, POLL_MS);
+      } else {
+        go(); // tracker never showed up (blocked / offline / wrong host)
+      }
+    };
+    poll();
+  }
 })();

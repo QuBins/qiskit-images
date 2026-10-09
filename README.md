@@ -38,11 +38,13 @@ In your browser:
 On your laptop:
 
 ```sh
-docker run --rm -p 8888:8888 ghcr.io/qubins/images:latest-small
+docker run --rm -p 8888:8888 -v "$PWD:/home/jovyan/work" ghcr.io/qubins/images:latest-small
 ```
 
-Watch stdout for `http://127.0.0.1:8888/lab?token=…`. Add
-`-v "$PWD:/home/jovyan/work"` to mount your notebooks.
+Open the `http://127.0.0.1:8888/lab?token=…` URL it prints. Save your
+notebooks in `work/`, which is the folder you ran the command in:
+everything else is deleted when the container stops. Podman, Windows
+and port options are under [Run on your laptop](#run-on-your-laptop-docker).
 
 The bare `:latest` tag (what Docker pulls when no tag is specified) is
 `latest-small`; the alias `latest` follows the current Qiskit minor
@@ -124,7 +126,7 @@ reading.
 
 **The easiest way to build one** is the
 [launch generator at qubins.org](https://qubins.org/#launch): paste
-the repo or notebook URL, pick an image, copy the Binder URL (and the
+the repo or notebook URL, pick an image, copy the launch link (and the
 badge Markdown, if you want one).
 
 ### What the badges look like
@@ -148,7 +150,11 @@ you don't want to pin a version in the badge text.
 [![launch on QuBins 2.4-xl](https://qubins.org/badges/launch-on-qubins-2.4-xl.svg)](https://qubins.org/launch/?image=2.4-xl&repo=https://github.com/YOU/YOUR-REPO)
 ```
 
-Optional: `&branch=BRANCH`, `&path=path/to/notebook.ipynb`.
+Optional: `&branch=BRANCH`, `&path=path/to/notebook.ipynb`. With a
+`path`, `&ui=rise` opens that notebook as a RISE slideshow instead of
+in JupyterLab. For slides with interactive widgets, use
+`image=2.1-xl-rise` with `&ui=rise-classic` (classic Notebook + classic
+RISE).
 
 **Open a single notebook on QuBins by raw URL** (xl images only):
 
@@ -187,6 +193,9 @@ fly. Two reasons:
 2. If the mybinder API or one of the underlying extensions changes
    its URL shape, only the redirector needs to update — every badge
    already published in the wild keeps working.
+3. It checks the image tag first. A mistyped tag, a retired Qiskit
+   minor or a monthly snapshot (which Binder can't launch) gets a
+   short page offering a working image instead of a mybinder error.
 
 The destination URL is always visible (rendered into the page before
 the JS redirect fires), so the reader sees where they're about to be
@@ -194,10 +203,13 @@ sent.
 
 ## Run on your laptop (Docker)
 
-Pull and start any tag, mapping Jupyter's port:
+Start any tag, mapping Jupyter's port and mounting the current folder
+as `work/`:
 
 ```sh
-docker run --rm -p 8888:8888 ghcr.io/qubins/images:latest-small
+docker run --rm -p 8888:8888 \
+  -v "$PWD:/home/jovyan/work" \
+  ghcr.io/qubins/images:latest-small
 ```
 
 Jupyter prints a tokenised URL once ready:
@@ -208,18 +220,19 @@ http://127.0.0.1:8888/lab?token=<long-hex-string>
 
 Open it; the token is required on first connect.
 
-To work on notebooks already on your laptop, mount your folder:
+**Save your work in `work/`.** `--rm` deletes the container when it
+stops, and with it everything outside the mounted folder. Without the
+`-v` line, nothing you create survives.
 
-```sh
-docker run --rm -p 8888:8888 \
-  -v "$PWD:/home/jovyan/work" \
-  ghcr.io/qubins/images:latest-small
-```
+- **Podman:** the same command with `podman` instead of `docker`.
+- **Windows:** in PowerShell use `-v "${PWD}:/home/jovyan/work"`, in
+  cmd.exe `-v "%cd%:/home/jovyan/work"`.
+- **Port 8888 already in use:** `-p 8899:8888`, then open port 8899.
+- **Linux file permissions:** Jupyter runs as `jovyan` (UID 1000).
+  Either make the host directory readable/writable by that UID or pass
+  `--user $(id -u):$(id -g)`.
 
-Jupyter runs as `jovyan` (UID 1000); on Linux, either make the host
-directory readable/writable by that UID or pass
-`--user $(id -u):$(id -g)`. Add `-d` for detached, `--name qubins` to
-allow `docker stop qubins`.
+Add `-d` for detached, `--name qubins` to allow `docker stop qubins`.
 
 ### Pinning an image (downstream projects)
 
@@ -228,7 +241,10 @@ rebuild produces a new digest, and old digests are garbage-collected a
 few days later. **Don't pin a nightly digest**: it will stop pulling.
 
 Instead, pin a **monthly snapshot**. The first nightly of each month
-also publishes `<version>-YYYYMMDD` (for example `2.5-xl-20261101`).
+also publishes `<version>-YYYYMMDD`, dated by the day that nightly ran
+(for example `2.5-xl-20261101`; the first set, made when snapshots
+started, is `-20261008`). Snapshots are for Docker only: Binder can't
+launch them.
 That tag is never moved and is kept for 12 months, so the tag and its
 digest both stay pullable for a year:
 
@@ -246,15 +262,15 @@ tag, so `cosign verify` (below) works on it too.
 
 The **xl** images bundle [nbgitpuller](https://github.com/jupyterhub/nbgitpuller),
 which lets a Binder URL auto-clone a notebook repo into the running
-session on first launch. The URL shape:
+session on first launch. Share it through the redirector, which builds
+the double-encoded mybinder URL for you:
 
 ```
-https://mybinder.org/v2/gh/QuBins/qiskit-images/latest-xl?urlpath=git-pull%3Frepo%3Dhttps%253A%252F%252Fgithub.com%252FYOU%252FYOUR-REPO%26urlpath%3Dlab%252Ftree%252FYOUR-REPO%252Fnotebook.ipynb
+https://qubins.org/launch/?image=latest-xl&repo=https://github.com/YOU/YOUR-REPO&path=notebook.ipynb
 ```
 
-The least painful way to build one is the
-[badge generator at qubins.org](https://qubins.org/#launch) — it
-produces both the raw mybinder URL and the badge markdown.
+The [launch generator at qubins.org](https://qubins.org/#launch)
+builds this link and the matching badge Markdown.
 
 ## How it works
 
