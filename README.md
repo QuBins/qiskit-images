@@ -283,7 +283,9 @@ workflow has three stages:
    `ghcr.io/.../images:<target>` with `docker buildx imagetools
    create`, sign the manifest with cosign keyless OIDC, then
    force-sync a per-target stub branch containing only
-   `binder/Dockerfile` (a one-line `FROM ghcr.io/...` reference).
+   `binder/Dockerfile` (a `FROM ghcr.io/...` reference) and the
+   Binder welcome notebook `START-HERE.ipynb` (from `binder-stub/`),
+   which bare launches open.
    Targets matching the `LATEST_QISKIT` env var also get a
    `latest-<flavor>` tag and stub branch.
 

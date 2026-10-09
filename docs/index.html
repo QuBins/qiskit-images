@@ -346,8 +346,9 @@
       A GitHub Actions workflow builds per-arch (amd64 + arm64), gates
       on a Trivy scan, publishes the multi-arch manifest to GHCR with
       a SLSA provenance attestation, signs it with cosign, and
-      force-pushes a tiny stub branch that <code>mybinder.org</code>
-      consumes to skip the dependency-tree rebuild.
+      force-pushes a tiny stub branch (the image reference plus a
+      welcome notebook) that <code>mybinder.org</code> consumes to skip
+      the dependency-tree rebuild.
     </p>
     <p>
       A daily cron rebuilds everything against the current base image
