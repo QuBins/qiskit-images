@@ -12,17 +12,27 @@ name: Binder warm-up
 # `phase: ready` we close the connection and move on.
 #
 # mybinder backends evict cold images on roughly a ~6h schedule, so a
-# 12h cadence keeps at least one backend per target warm most of the
+# twice-daily cadence keeps at least one backend per target warm most of the
 # time.
 #
 # Triggered:
-#   - after a successful main-branch run of "Build matrix" (push or
-#     workflow_dispatch only — Build matrix's daily cron is filtered
-#     out at the job level so it doesn't double-fire with our own cron).
-#   - every 12 hours (04:00 + 16:00 UTC). The 04:00 slot lines up with
-#     Build matrix's daily republish; the 16:00 slot covers the second
-#     eviction window of the day.
+#   - after every main-branch run of "Build matrix" that got as far as
+#     publishing (conclusion success or failure: a failed run still
+#     published and re-stubbed its other targets), including its daily
+#     cron. Each nightly force-pushes a fresh orphan commit to every stub
+#     branch, and mybinder keys its image cache on that commit SHA, so
+#     the first launch after a nightly is cold until something builds
+#     it. Until 2026-10 the nightly was filtered out here in favour of
+#     our own 04:00 cron, but GitHub delays both crons by ~6-7 h and
+#     ours usually ran minutes *before* the new stubs were pushed
+#     (2026-10-08: warm-up 11:10, stubs 11:21 UTC), leaving Binder cold
+#     every morning.
+#   - daily at 16:00 UTC, to re-warm after mybinder's ~6 h eviction.
 #   - manual workflow_dispatch.
+#
+# One run at a time: a nightly-triggered run and the 16:00 one can
+# overlap after GitHub's cron delays, and two concurrent sweeps would
+# only double the load on mybinder.
 #
 # Best-effort: warm-up failures do not fail the workflow. mybinder is
 # a shared community service and a flaky backend is not our problem
@@ -33,11 +43,10 @@ on:
     types: [completed]
     branches: [main]
   schedule:
-    # Every 12h, at :00 of each half of the day. The 04:00 slot also
-    # picks up the freshly-pushed stub branches from the daily Build
-    # matrix cron. mybinder is amd64-only, so this single hit per
-    # target covers every user regardless of their local arch.
-    - cron: '0 4,16 * * *'
+    # The post-nightly warm comes from workflow_run above; this is the
+    # second, eviction-window pass. mybinder is amd64-only, so one hit
+    # per target covers every user regardless of their local arch.
+    - cron: '0 16 * * *'
   # Manual trigger lets us validate this workflow without waiting for
   # the next Build matrix run on main. Useful after editing this file
   # itself (since workflow_run only fires after another workflow
@@ -47,21 +56,27 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: binder-warmup
+  cancel-in-progress: false
+
 jobs:
   warmup:
     # Allowed triggers:
     #  - workflow_dispatch (manual): always
     #  - schedule (our own daily cron): always
-    #  - workflow_run from Build matrix: only when its conclusion is
-    #    success AND its triggering event was push or workflow_dispatch.
-    #    Filter out Build matrix's own scheduled cron so we don't
-    #    double-fire alongside our own cron above.
+    #  - workflow_run from Build matrix: when it published (success, or
+    #    failure of some targets) from push, workflow_dispatch or its
+    #    daily schedule. Cancelled/skipped runs and pull_request runs
+    #    (which never publish) are ignored.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'schedule' ||
-      (github.event.workflow_run.conclusion == 'success' &&
+      ((github.event.workflow_run.conclusion == 'success' ||
+        github.event.workflow_run.conclusion == 'failure') &&
        (github.event.workflow_run.event == 'push' ||
-        github.event.workflow_run.event == 'workflow_dispatch'))
+        github.event.workflow_run.event == 'workflow_dispatch' ||
+        github.event.workflow_run.event == 'schedule'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -209,7 +224,7 @@ jobs:
         # This only extends how long we are willing to *watch*; it does
         # not make mybinder do more work. Worst case, every target timing
         # out, is 3x300s + 5x900s + pacing, about 90min, against a median
-        # well under 15min — fine for a 12-hourly best-effort job and well
+        # well under 15min — fine for a twice-daily best-effort job and well
         # inside the 360min default job cap.
         #
         # 10s pacing between targets to be polite to a shared
