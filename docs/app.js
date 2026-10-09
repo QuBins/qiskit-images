@@ -46,6 +46,7 @@
     const latest = data.latest_qiskit;
 
     renderQuickStart(latest);
+    renderFlavorSizes(images, latest);
     renderCatalog(images);
     populateFilters(images, latest);
     populateGeneratorImages(images, latest);
@@ -79,6 +80,29 @@
       copyToClipboard(document.getElementById("qs-docker").textContent, e.currentTarget);
       track("QuBins: hero docker copy");
     });
+  }
+
+  // The comparison table's "Approx. download" row: fill in the real
+  // sizes of the latest minor's small and xl, and of the newest xxl that
+  // has the AI transpiler. The static text stays when data is missing.
+  function renderFlavorSizes(images, latest) {
+    const pick = (flavor) => images.find((i) =>
+      i.flavor === flavor &&
+      (flavor === "xxl" ? i.ai_transpiler !== false : i.qiskit_minor === latest));
+    for (const flavor of ["small", "xl", "xxl"]) {
+      const cell = document.getElementById(`size-${flavor}`);
+      const img = pick(flavor);
+      if (!cell || !img || typeof img.size_mb !== "number") continue;
+      cell.textContent = `${img.binder_tag}: ${sizeText(img)}`;
+    }
+  }
+
+  // "903 MB", or "903 MB (arm64 844 MB)" when the arches differ by more
+  // than 5 % (gem-suite and the AI transpiler have no arm64 wheels).
+  function sizeText(img) {
+    const a = img.size_mb, b = img.size_mb_arm64;
+    if (typeof b !== "number" || Math.abs(a - b) <= 0.05 * a) return formatSize(a);
+    return `${formatSize(a)} (arm64 ${formatSize(b)})`;
   }
 
   // ------------------------------------------------------------ catalog table
@@ -139,7 +163,7 @@
       if (typeof img.size_mb === "number") {
         const sub = document.createElement("div");
         sub.className = "row-sub";
-        sub.textContent = formatSize(img.size_mb);
+        sub.textContent = sizeText(img);
         if (img.updated_at) {
           sub.title = `Built ${formatDate(img.updated_at)}`;
         }
@@ -173,7 +197,7 @@
       const code = document.createElement("code");
       code.textContent = img.binder_tag;
       dockerCell.appendChild(code);
-      const fullCmd = `docker run --rm -p 8888:8888 ${img.docker_tag}`;
+      const fullCmd = `docker run --rm -p 8888:8888 -v "$PWD:/home/jovyan/work" ${img.docker_tag}`;
       const copyBtn = document.createElement("button");
       copyBtn.className = "button secondary";
       copyBtn.type = "button";
@@ -282,12 +306,14 @@
   // small is not offered here at all; it stays one click away in the
   // catalog for bare launches. An xxl whose AI transpiler is disabled
   // (ai_transpiler false: same content as its xl) is left out too, so
-  // nobody picks it expecting the transpiler.
+  // nobody picks it expecting the transpiler. xl-rise is xl plus the
+  // classic RISE presenter, so it loads repos and notebooks like xl.
   function populateGeneratorImages(images, latest) {
     const sel = document.getElementById("launch-image");
     if (!sel) return;
     const usable = (img) =>
-      img.flavor === "xl" || (img.flavor === "xxl" && img.ai_transpiler !== false);
+      img.flavor === "xl" || img.flavor === "xl-rise" ||
+      (img.flavor === "xxl" && img.ai_transpiler !== false);
     const hasXxl = images.some(
       (img) => img.qiskit_minor === latest && img.flavor === "xxl" && usable(img),
     );
@@ -499,7 +525,9 @@
   }
 
   // Main render: read the current form, detect mode, apply, then
-  // build the Binder URL + badge markdown for that mode.
+  // build the share link + badge markdown for that mode. Both point at
+  // the /launch/ redirector, which builds the mybinder URL (one place
+  // to fix when mybinder changes, and it checks the tag first).
   function refreshLaunch() {
     const det     = detectMode(document.getElementById("launch-url").value);
     const out     = document.getElementById("launch-out");
@@ -523,13 +551,10 @@
 
     const mode = applyDetection(det);
 
-    let url, launchParams = new URLSearchParams();
+    const launchParams = new URLSearchParams();
     launchParams.set("image", image);
     if (mode === "file") {
-      const raw = det.raw;
-      const inner = `lab?fromURL=${encodeURIComponent(raw)}`;
-      url = `https://mybinder.org/v2/gh/${REPO}/${image}?urlpath=${encodeURIComponent(inner)}`;
-      launchParams.set("file", raw);
+      launchParams.set("file", det.raw);
     } else { // clone
       // Read live values (applyDetection may have just populated them).
       const branch = document.getElementById("launch-branch").value.trim();
@@ -537,39 +562,31 @@
       // Resolve the bare repo URL: prefer detection's repoUrl (handles
       // /blob/ etc.), otherwise use the field as-is.
       const repoUrl  = det.repoUrl || document.getElementById("launch-url").value.trim();
-      const repoName = det.repoName || "repo";
       // RISE presenter needs a concrete .ipynb path (applyDetection has
       // already disabled + cleared the toggle when the path isn't one).
-      // Mirrors the ui=rise handling in docs/launch/launch.js.
+      // On xl-rise, use its classic presenter (interactive widgets in
+      // slides); launch.js turns ui=rise into the right urlpath.
       const rise = document.getElementById("launch-rise").checked && path.endsWith(".ipynb");
-      const innerParams = new URLSearchParams();
-      innerParams.set("repo", repoUrl);
-      if (branch) innerParams.set("branch", branch);
-      innerParams.set("urlpath",
-        rise ? `rise/${repoName}/${path}`
-          : path ? `lab/tree/${repoName}/${path}`
-          : `lab/tree/${repoName}`);
-      url = `https://mybinder.org/v2/gh/${REPO}/${image}?urlpath=${encodeURIComponent("git-pull?" + innerParams.toString())}`;
       launchParams.set("repo", repoUrl);
       if (branch) launchParams.set("branch", branch);
       if (path)   launchParams.set("path", path);
-      if (rise)   launchParams.set("ui", "rise");
+      if (rise)   launchParams.set("ui", /-rise$/.test(image) ? "rise-classic" : "rise");
     }
+    const url = `${PAGES}/launch/?${launchParams.toString()}`;
     out.value = url;
     open.href = url;
     open.hidden = true;
-    updateLaunchBadge(image, launchParams);
+    updateLaunchBadge(image, url);
   }
 
   // The launch form always embeds a notebook (repo or single .ipynb),
   // so we use the "launch on QuBins" badge variant; same as before,
   // but with single-form IDs.
-  function updateLaunchBadge(image, launchParams) {
+  function updateLaunchBadge(image, launchUrl) {
     const md      = document.getElementById("launch-badge-md");
     const preview = document.getElementById("launch-badge-preview");
     const link    = document.getElementById("launch-badge-link");
     const badgeUrl  = `${PAGES}/badges/launch-on-qubins-${image}.svg`;
-    const launchUrl = `${PAGES}/launch/?${launchParams.toString()}`;
     md.value = `[![launch on QuBins ${image}](${badgeUrl})](${launchUrl})`;
     preview.src = badgeUrl;
     preview.alt = `launch on QuBins ${image}`;
@@ -590,7 +607,7 @@
     // Show MB up to ~1 GB, then GB with one decimal. Download sizes
     // here range from ~0.4 GB (small) through ~0.9 GB (xl) to
     // ~4 GB (2.4-xxl amd64, torch + CUDA).
-    if (mb < 1024) return `${Math.round(mb)} MB`;
+    if (mb < 1000) return `${Math.round(mb)} MB`;
     return `${(mb / 1024).toFixed(1)} GB`;
   }
 

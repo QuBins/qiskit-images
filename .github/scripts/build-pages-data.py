@@ -10,12 +10,13 @@ Schema (one entry per published image):
 
     {
       "qiskit_minor": "2.4",
-      "flavor":       "small" | "xl" | "xxl",
+      "flavor":       "small" | "xl" | "xxl" | "xl-rise",
       "is_latest":    true,      # current LATEST_QISKIT minor
       "binder_tag":   "2.4-small",
       "docker_tag":   "ghcr.io/qubins/images:2.4-small",
       "notes":        "reduced set: ..."   # optional
       "size_mb":      812.5,                  # multi-arch index, amd64 child
+      "size_mb_arm64": 790.1,                 # same, arm64 child
       "updated_at":   "2026-05-15T04:34:21Z", # GHCR manifest push time
       "qiskit_patch": "2.4.1",                # from OCI image.version label
     }
@@ -83,6 +84,11 @@ NOTES: dict[tuple[str, str], str] = {
         "wheels): the arm64 build of this tag has the same content as "
         "xl. Use xl unless you need the local AI transpiler."
     ),
+    ("2.1", "xl-rise"): (
+        "xl plus the classic Notebook frontend with classic RISE, so "
+        "slideshows can show interactive widgets. Launch a notebook "
+        "with ui=rise-classic; the Quantum Coin Game uses it."
+    ),
 }
 
 # An xxl whose requirements file has the transpiler line commented out
@@ -125,8 +131,8 @@ def latest_qiskit() -> str:
 
 
 def discover_versions() -> list[dict]:
-    pattern = re.compile(r"^(\d+\.\d+)-(small|xl|xxl)$")
-    flavor_rank = {"small": 0, "xl": 1, "xxl": 2}
+    pattern = re.compile(r"^(\d+\.\d+)-(small|xl|xxl|xl-rise)$")
+    flavor_rank = {"small": 0, "xl": 1, "xl-rise": 2, "xxl": 3}
     entries: list[tuple[tuple[int, int], str, str]] = []
     for child in VERSIONS_DIR.iterdir():
         if not child.is_dir():
@@ -137,7 +143,7 @@ def discover_versions() -> list[dict]:
         minor, flavor = m.group(1), m.group(2)
         sort_key = tuple(int(p) for p in minor.split("."))
         entries.append((sort_key, minor, flavor))
-    # newest minor first, then small -> xl -> xxl within a minor
+    # newest minor first, then small -> xl -> xl-rise -> xxl within a minor
     entries.sort(key=lambda x: (-x[0][0], -x[0][1], flavor_rank.get(x[2], 99)))
     return [
         {"qiskit_minor": minor, "flavor": flavor}
@@ -149,9 +155,7 @@ def discover_versions() -> list[dict]:
 #
 # Best-effort fetch of per-tag size + push timestamp from the public
 # GHCR registry. Anonymous reads work; we fetch a token, then the
-# multi-arch index, then the amd64 child manifest to sum layer sizes.
-# arm64 layers are typically within ~5 % of amd64, so reporting amd64
-# is a fair single-number proxy.
+# multi-arch index, then both child manifests to sum layer sizes.
 #
 # If anything fails — package not yet published, registry blip, network
 # missing in a local run — we silently omit the fields rather than
@@ -198,17 +202,28 @@ def _ghcr_get(path: str, accept: str) -> dict | None:
         return None
 
 
+MANIFEST_ACCEPT = (
+    "application/vnd.oci.image.manifest.v1+json, "
+    "application/vnd.docker.distribution.manifest.v2+json"
+)
+
+
+def _manifest_size(manifest: dict) -> int:
+    """Download size of one platform's image: config + all layers."""
+    total = (manifest.get("config") or {}).get("size") or 0
+    for layer in manifest.get("layers") or []:
+        total += layer.get("size") or 0
+    return total
+
+
 def fetch_image_meta(tag: str) -> dict:
-    """Returns {size_mb, updated_at} for the given tag, or {}.
+    """Returns {size_mb, size_mb_arm64, updated_at, qiskit_patch} for
+    the given tag, or {}.
 
     Strategy:
-      1. Multi-arch index → pick amd64 child manifest digest.
-      2. amd64 child manifest → sum config.size + layers[].size.
-      3. amd64 config blob → read `created` for the push timestamp.
-
-    arm64 layers are typically within ~5 % of amd64; reporting amd64
-    is a fair single-number proxy. We avoid fetching the arm64 child
-    entirely to keep the per-tag cost at 3 GET requests.
+      1. Multi-arch index → pick the amd64 and arm64 child digests.
+      2. Each child manifest → sum config.size + layers[].size.
+      3. amd64 config blob → read the build time and labels.
 
     If any step fails (package not yet published, registry blip,
     network missing on a local run), we return whatever we managed
@@ -221,26 +236,26 @@ def fetch_image_meta(tag: str) -> dict:
     )
     if not index or not isinstance(index.get("manifests"), list):
         return {}
-    amd64_digest = None
+    digests: dict[str, str] = {}
     for m in index["manifests"]:
         p = m.get("platform") or {}
-        if p.get("architecture") == "amd64" and p.get("os") == "linux":
-            amd64_digest = m.get("digest")
-            break
-    if not amd64_digest:
+        if p.get("os") == "linux" and p.get("architecture") in ("amd64", "arm64"):
+            digests.setdefault(p["architecture"], m.get("digest"))
+    if not digests.get("amd64"):
         return {}
-    manifest = _ghcr_get(
-        f"manifests/{amd64_digest}",
-        "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
-    )
+    manifest = _ghcr_get(f"manifests/{digests['amd64']}", MANIFEST_ACCEPT)
     if not manifest:
         return {}
     out: dict = {}
-    total = (manifest.get("config") or {}).get("size") or 0
-    for layer in manifest.get("layers") or []:
-        total += layer.get("size") or 0
+    total = _manifest_size(manifest)
     if total > 0:
         out["size_mb"] = round(total / (1024 * 1024), 1)
+    # arm64 differs where wheels are missing (gem-suite; the whole AI
+    # transpiler stack on xxl), so the page shows it when it differs.
+    arm = _ghcr_get(f"manifests/{digests['arm64']}", MANIFEST_ACCEPT) if digests.get("arm64") else None
+    arm_total = _manifest_size(arm) if arm else 0
+    if arm_total > 0:
+        out["size_mb_arm64"] = round(arm_total / (1024 * 1024), 1)
     # Push time + OCI labels live on the config blob, not on the
     # manifest. Fetch the blob and read them out. The
     # `org.qubins.qiskit.patch` label is populated by the build-matrix

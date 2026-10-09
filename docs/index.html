@@ -61,20 +61,15 @@
 <header>
   <h1>QuBins</h1>
   <p class="lede">
-    Prebuilt Qiskit environments. Click a badge to run in your
-    browser, or <code>docker pull</code> on your laptop.
+    Run Qiskit in your browser: nothing to install, free, no account.
+    Or run the same image on your laptop with Docker.
   </p>
-  <p class="tagline">
-    <em>QuBins</em> — the place for your QuBits: prebuilt quantum
-    compartments, pick one, run your Qiskit notebook on (my)binder or
-    as a container (&ldquo;bin&rdquo;).
-  </p>
-  <p class="trust-strip">
-    <span title="cosign keyless OIDC">cosign-signed</span>
-    <span title="Trivy HIGH/CRITICAL gated on every build">Trivy-scanned</span>
-    <span title="Daily cron at 04:00 UTC absorbs upstream base-image CVE fixes">daily-rebuilt</span>
-    <span title="linux/amd64 + linux/arm64 (Apple Silicon, Graviton)">multi-arch</span>
-    <span title="Build provenance attestations attached to every published manifest">SLSA-attested</span>
+  <p class="trust-strip" aria-label="Why trust these images">
+    <a href="#trust" title="cosign keyless OIDC">cosign-signed</a>
+    <a href="#trust" title="Trivy HIGH/CRITICAL gated on every build">Trivy-scanned</a>
+    <a href="#trust" title="Daily cron at 04:00 UTC absorbs upstream base-image CVE fixes">daily-rebuilt</a>
+    <a href="#trust" title="linux/amd64 + linux/arm64 (Apple Silicon, Graviton)">multi-arch</a>
+    <a href="#trust" title="Build provenance attestations attached to every published manifest">SLSA-attested</a>
   </p>
   <p class="badges">
     <a href="https://github.com/QuBins/qiskit-images/actions/workflows/build-matrix.yml"><img src="https://github.com/QuBins/qiskit-images/actions/workflows/build-matrix.yml/badge.svg" alt="Build matrix status"></a>
@@ -144,13 +139,23 @@
     <div class="qs-docker">
       <p class="qs-docker-label">Or run locally with Docker:</p>
       <p class="qs-line">
-        <code id="qs-docker">docker run --rm -p 8888:8888 ghcr.io/qubins/images:latest-small</code>
+        <code id="qs-docker">docker run --rm -p 8888:8888 -v "$PWD:/home/jovyan/work" ghcr.io/qubins/images:latest-small</code>
         <button class="button secondary" id="qs-docker-copy" type="button">Copy</button>
       </p>
       <p class="hint">
-        Watch stdout for the tokenised <code>http://127.0.0.1:8888/lab?token=…</code> URL.
-        Mount a folder with <code>-v "$PWD:/home/jovyan/work"</code>.
+        Open the <code>http://127.0.0.1:8888/lab?token=…</code> URL it prints.
+        <strong>Save your notebooks in <code>work/</code></strong>: that is the
+        folder you ran the command in. Everything else is deleted when the
+        container stops.
       </p>
+      <details class="hint">
+        <summary>Podman, Windows, a busy port</summary>
+        <ul>
+          <li>Podman: the same command with <code>podman</code> instead of <code>docker</code>.</li>
+          <li>Windows PowerShell: <code>-v "${PWD}:/home/jovyan/work"</code>; cmd.exe: <code>-v "%cd%:/home/jovyan/work"</code>.</li>
+          <li>Port 8888 already in use: <code>-p 8899:8888</code>, then open port 8899 instead.</li>
+        </ul>
+      </details>
     </div>
   </section>
 
@@ -167,8 +172,8 @@
     </p>
     <p class="hint">
       Paste a GitHub repo URL (or a <code>/blob/</code> URL, or a raw
-      <code>.ipynb</code> URL). You get a Binder launch URL to share,
-      and an optional Markdown badge for your README.
+      <code>.ipynb</code> URL). You get a launch link to share, and an
+      optional Markdown badge for your README.
     </p>
     <p id="launch-mode-note" class="hint" hidden></p>
 
@@ -196,14 +201,16 @@
           <label class="check" id="launch-rise-wrap">
             <input type="checkbox" id="launch-rise">
             Open as a RISE slideshow
-            <span class="hint">— needs a notebook path; presents it full-tab as slides</span>
+            <span class="hint">— needs a notebook path; presents it full-tab as slides.
+              With <code>2.1-xl-rise</code>, it uses classic RISE, which also shows
+              interactive widgets in slides.</span>
           </label>
         </div>
       </div>
     </form>
 
     <div class="output">
-      <label>Generated URL <span class="hint">(direct mybinder.org link — share this)</span>
+      <label>Launch link <span class="hint">(share this; it goes through qubins.org/launch/ to mybinder.org)</span>
         <textarea id="launch-out" readonly rows="3"></textarea>
       </label>
       <div class="actions">
@@ -221,10 +228,11 @@
         <details>
           <summary>Why does this go through <code>/launch/</code>?</summary>
           <p class="hint">
-            The link in the badge points at our <a href="launch/">/launch/ redirector</a>
+            The link and the badge point at our <a href="launch/">/launch/ redirector</a>
             rather than straight to mybinder.org. When mybinder's URL form changes
-            (it has, historically), every badge already in the wild keeps working
-            with no edit needed on the reader's side.
+            (it has, historically), every link already in the wild keeps working
+            with no edit needed on the reader's side. It also catches a mistyped
+            or retired image tag and offers a working one.
           </p>
         </details>
       </div>
@@ -237,7 +245,7 @@
       Every image is daily-rebuilt, Trivy-scanned (HIGH/CRITICAL
       gated), and cosign-signed via GitHub Actions OIDC. The Docker
       tag template for every row is:
-      <code>docker run --rm -p 8888:8888 ghcr.io/qubins/images:&lt;tag&gt;</code>
+      <code>docker run --rm -p 8888:8888 -v "$PWD:/home/jovyan/work" ghcr.io/qubins/images:&lt;tag&gt;</code>
     </p>
 
     <details id="catalog-flavors" class="catalog-flavors">
@@ -261,10 +269,10 @@
               as <code>2.5-xl</code> until the transpiler supports Qiskit 2.5)</td>
           </tr>
           <tr>
-            <th>Approx. download</th>
-            <td>~0.4 GB</td>
-            <td>~0.9 GB</td>
-            <td>~4 GB (amd64)</td>
+            <th>Download</th>
+            <td id="size-small">~0.4 GB</td>
+            <td id="size-xl">~0.9 GB</td>
+            <td id="size-xxl">~4 GB (amd64)</td>
           </tr>
           <tr>
             <th>Included</th>
@@ -306,6 +314,12 @@
           </tr>
         </tbody>
       </table>
+      <p class="hint">
+        One more image, <code>2.1-xl-rise</code>, is xl plus the classic
+        Notebook frontend with classic RISE, for slideshows with interactive
+        widgets (launch it with <code>ui=rise-classic</code>; the Quantum Coin
+        Game above uses it).
+      </p>
     </details>
 
     <div class="filters" role="group" aria-label="Filter catalog">
@@ -318,6 +332,7 @@
           <option value="">All</option>
           <option value="small">small</option>
           <option value="xl">xl</option>
+          <option value="xl-rise">xl-rise</option>
           <option value="xxl">xxl</option>
         </select>
       </label>
@@ -354,6 +369,24 @@
       A daily cron rebuilds everything against the current base image
       to absorb upstream CVE fixes. Dependabot watches the docker base,
       GitHub Action versions, and the latest Qiskit minor's pip pins.
+    </p>
+    <h3 id="trust">Why trust these images</h3>
+    <ul>
+      <li><strong>Scanned:</strong> every build is scanned with Trivy, and an
+        image with a fixable HIGH or CRITICAL vulnerability is not published.</li>
+      <li><strong>Rebuilt daily:</strong> security fixes in the base image and
+        packages arrive within a day.</li>
+      <li><strong>Signed and traceable:</strong> each image is signed with
+        cosign (keyless, via GitHub Actions) and carries a SLSA build-provenance
+        attestation, so you can check it was built from this repository
+        (<a href="https://github.com/QuBins/qiskit-images#verifying-images">how to verify</a>).</li>
+      <li><strong>Multi-arch:</strong> linux/amd64 and linux/arm64 (Apple
+        Silicon, Raspberry Pi&nbsp;5, Graviton).</li>
+    </ul>
+    <p class="tagline">
+      <em>QuBins</em> — the place for your QuBits: prebuilt quantum
+      compartments, pick one, run your Qiskit notebook on (my)binder or
+      as a container (&ldquo;bin&rdquo;).
     </p>
     <p>
       More in the <a href="https://github.com/QuBins/qiskit-images#readme">repository README</a>.

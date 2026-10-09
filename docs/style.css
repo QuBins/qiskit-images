@@ -66,8 +66,8 @@ header h1 {
 }
 
 /* Trust strip: row of small "supply-chain at a glance" tokens under
-   the lede. Hover/title tooltips carry the detail; the strip itself
-   stays scannable. */
+   the lede. Each links to the plain-language "Why trust these images"
+   list in How it works; title tooltips carry the short detail. */
 .trust-strip {
   display: flex;
   flex-wrap: wrap;
@@ -75,14 +75,15 @@ header h1 {
   margin: 0 0 0.75rem 0;
   font-size: 0.85em;
 }
-.trust-strip span {
+.trust-strip a {
   background: var(--bg-soft);
   color: var(--fg-muted);
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 0.1em 0.7em;
-  cursor: default;
+  text-decoration: none;
 }
+.trust-strip a:hover { color: var(--fg); border-color: var(--fg-muted); }
 
 .badges .sep {
   color: var(--fg-muted);
