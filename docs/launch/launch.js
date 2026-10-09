@@ -16,7 +16,8 @@
 //                          Requires a rise-capable image (e.g. 2.1-xl-rise).
 //   file=<raw url>         single-file loader (jupyterlab-open-url-parameter)
 //
-// Precedence: `file` wins over `repo`; if neither, bare image launch.
+// Precedence: `file` wins over `repo`; if neither, bare image launch
+// (which opens the stub's START-HERE.ipynb).
 //
 // We use location.replace() so the redirector doesn't pollute the
 // user's history. The destination URL is also rendered into the
@@ -86,7 +87,9 @@
     const innerEncoded = encodeURIComponent("git-pull?" + inner.toString());
     url = `https://mybinder.org/v2/gh/${REPO}/${image}?urlpath=${innerEncoded}`;
   } else {
-    url = `https://mybinder.org/v2/gh/${REPO}/${image}`;
+    // Bare launch: open the welcome notebook every stub branch carries
+    // (binder-stub/START-HERE.ipynb) rather than an empty Lab.
+    url = `https://mybinder.org/v2/gh/${REPO}/${image}?urlpath=${encodeURIComponent("lab/tree/START-HERE.ipynb")}`;
   }
 
   // Belt-and-braces: never wire a navigation sink to anything whose

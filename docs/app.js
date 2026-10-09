@@ -58,7 +58,9 @@
     const tagEl = document.getElementById("qs-latest-tag");
     if (tagEl) tagEl.textContent = `latest-xl (= ${latest}-xl)`;
     const heroBtn = document.getElementById("qs-binder-xl");
-    heroBtn.href = `https://mybinder.org/v2/gh/${REPO}/latest-xl`;
+    // Land on the welcome notebook every stub branch carries
+    // (binder-stub/START-HERE.ipynb) instead of an empty Lab.
+    heroBtn.href = `https://mybinder.org/v2/gh/${REPO}/latest-xl?urlpath=${encodeURIComponent("lab/tree/START-HERE.ipynb")}`;
     heroBtn.addEventListener("click", () =>
       track("QuBins: hero launch click", { tag: "latest-xl" }));
     // Featured example cards (static hrefs in index.html → /launch/).

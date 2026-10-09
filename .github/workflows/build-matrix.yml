@@ -861,6 +861,15 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          # Binder-only welcome notebook. It goes into the stub, not the
+          # image: it is about mybinder sessions (temporary, idle
+          # shutdown), and Docker/RasQberry users of the image have their
+          # own landing pages. repo2docker builds binder/Dockerfile with
+          # the repo root as context, hence the binder/ prefix in COPY.
+          # Stashed first because sync_branch wipes the working tree.
+          start_here="${RUNNER_TEMP}/START-HERE.ipynb"
+          cp binder-stub/START-HERE.ipynb "${start_here}"
+
           sync_branch() {
             local branch="$1"
             local image="$2"
@@ -868,8 +877,10 @@ jobs:
             git rm -rf --cached . >/dev/null
             find . -mindepth 1 -maxdepth 1 -not -name .git -exec rm -rf {} +
             mkdir -p binder
-            printf 'FROM %s\n' "$image" > binder/Dockerfile
-            git add binder/Dockerfile
+            cp "${start_here}" binder/START-HERE.ipynb
+            printf 'FROM %s\nCOPY --chown=${NB_UID}:${NB_GID} binder/START-HERE.ipynb /home/jovyan/START-HERE.ipynb\n' \
+              "$image" > binder/Dockerfile
+            git add binder/Dockerfile binder/START-HERE.ipynb
             git commit -m "Sync stub branch for $branch"
             # Retry the push. On 2026-09-13 (run 34748081224) GitHub
             # rejected three of these concurrent force-pushes server-side
