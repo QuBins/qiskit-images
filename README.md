@@ -256,8 +256,10 @@ environment its notebooks were tested against:
 `https://qubins.org/launch/?image=2.5-xl-20261101` (add `repo=`,
 `path=` or `file=` as for any other tag). Each snapshot has an
 immutable git tag of the same name as its Binder stub, `FROM` the
-snapshot's digest. Because that commit never changes, Binder's cache
-for it stays warm all month instead of resetting with every nightly.
+snapshot's digest. Because that commit never changes, mybinder builds
+it once and reuses that build, instead of rebuilding after every
+nightly. mybinder.org is a free, shared service, so we don't pre-warm
+snapshots: they cost it nothing until someone launches one.
 
 To stay current, bump the pin when a new snapshot appears. The newest
 snapshot for a version is the highest `<version>-YYYYMMDD` in the

@@ -1007,8 +1007,11 @@ jobs:
           # so they should launch on Binder too. Each gets an immutable
           # git *tag* of the same name, FROM the snapshot's digest:
           # mybinder resolves tags like branches, and since the commit
-          # never moves, its Binder cache stays warm all month instead
-          # of going cold with every nightly re-push.
+          # never moves, mybinder builds it once per server and reuses
+          # that, rather than rebuilding after every nightly re-push.
+          # mybinder.org is a free shared service: snapshot tags are
+          # deliberately NOT in binder-warmup.yml, so they cost it
+          # nothing until someone actually launches one.
           #
           # Reconciled against the registry on every run rather than
           # created only when a snapshot is published, so the first set
