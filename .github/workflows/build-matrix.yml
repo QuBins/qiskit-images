@@ -309,6 +309,11 @@ jobs:
           epoch="$(git log -1 --format=%ct -- Dockerfile versions docker)"
           echo "SOURCE_DATE_EPOCH=${epoch}" >> "$GITHUB_ENV"
           echo "SOURCE_DATE_EPOCH=${epoch} ($(date -u -d "@${epoch}" +%FT%TZ))"
+          # Once per job, not per build step: the push step must hit the
+          # scan step's cache, or a job running across midnight UTC
+          # would publish a fresh resolution Trivy never scanned. The
+          # Dockerfile's pip step explains why it busts daily.
+          echo "PIP_RESOLVE_DATE=$(date -u +%Y%m%d)" >> "$GITHUB_ENV"
 
       # The ubuntu-24.04 / ubuntu-24.04-arm runners ship with ~14 GB
       # of preinstalled toolchains (.NET, Android SDK, Haskell, Swift
@@ -390,6 +395,7 @@ jobs:
           build-args: |
             QISKIT_VERSION=${{ matrix.version }}
             SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }}
+            PIP_RESOLVE_DATE=${{ env.PIP_RESOLVE_DATE }}
           platforms: ${{ matrix.platform.name }}
           tags: ghcr.io/${{ steps.repo.outputs.owner_lc }}/${{ env.IMAGE }}:${{ matrix.version }}-${{ matrix.platform.arch }}
           # = load: true, plus timestamp rewriting (see "Reproducible-
@@ -617,6 +623,7 @@ jobs:
           build-args: |
             QISKIT_VERSION=${{ matrix.version }}
             SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }}
+            PIP_RESOLVE_DATE=${{ env.PIP_RESOLVE_DATE }}
           platforms: ${{ matrix.platform.name }}
           tags: ghcr.io/${{ steps.repo.outputs.owner_lc }}/${{ env.IMAGE }}:${{ matrix.version }}-${{ matrix.platform.arch }}
           # = push: true, plus timestamp rewriting (see "Reproducible-
