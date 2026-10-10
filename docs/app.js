@@ -140,6 +140,16 @@
         sub.title = `Installed: qiskit==${img.qiskit_patch}`;
         minorCell.appendChild(sub);
       }
+      // Runtime differs between flavors of one minor (2.5-small takes
+      // the newest, 2.5-xl is held back by qiskit-serverless), and
+      // notebooks fail on it, so show it next to the Qiskit patch.
+      if (img.qiskit_ibm_runtime) {
+        const sub = document.createElement("div");
+        sub.className = "row-sub";
+        sub.textContent = `runtime ${img.qiskit_ibm_runtime}`;
+        sub.title = `Installed: qiskit-ibm-runtime==${img.qiskit_ibm_runtime}`;
+        minorCell.appendChild(sub);
+      }
       tr.appendChild(minorCell);
 
       const flavorCell = document.createElement("td");
@@ -208,6 +218,17 @@
         track("QuBins: catalog docker copy", { tag: img.binder_tag });
       });
       dockerCell.appendChild(copyBtn);
+      // Newest monthly snapshot: the tag to pin (see README, "Pinning").
+      const snap = (img.snapshots || [])[0];
+      if (snap) {
+        const sub = document.createElement("div");
+        sub.className = "row-sub";
+        sub.textContent = `pin: ${snap.tag}`;
+        sub.title = snap.digest
+          ? `Monthly snapshot, kept 12 months. ${snap.digest}`
+          : "Monthly snapshot, kept 12 months.";
+        dockerCell.appendChild(sub);
+      }
       tr.appendChild(dockerCell);
 
       tbody.appendChild(tr);

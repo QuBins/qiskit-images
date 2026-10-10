@@ -194,8 +194,8 @@ fly. Two reasons:
    its URL shape, only the redirector needs to update — every badge
    already published in the wild keeps working.
 3. It checks the image tag first. A mistyped tag, a retired Qiskit
-   minor or a monthly snapshot (which Binder can't launch) gets a
-   short page offering a working image instead of a mybinder error.
+   minor or a snapshot that doesn't exist gets a short page offering
+   a working image instead of a mybinder error.
 
 The destination URL is always visible (rendered into the page before
 the JS redirect fires), so the reader sees where they're about to be
@@ -243,8 +243,7 @@ few days later. **Don't pin a nightly digest**: it will stop pulling.
 Instead, pin a **monthly snapshot**. The first nightly of each month
 also publishes `<version>-YYYYMMDD`, dated by the day that nightly ran
 (for example `2.5-xl-20261101`; the first set, made when snapshots
-started, is `-20261008`). Snapshots are for Docker only: Binder can't
-launch them.
+started, is `-20261008`).
 That tag is never moved and is kept for 12 months, so the tag and its
 digest both stay pullable for a year:
 
@@ -252,11 +251,75 @@ digest both stay pullable for a year:
 docker pull ghcr.io/qubins/images:2.5-xl-20261101
 ```
 
+Snapshots launch on Binder too, so a course can pin the exact
+environment its notebooks were tested against:
+`https://qubins.org/launch/?image=2.5-xl-20261101` (add `repo=`,
+`path=` or `file=` as for any other tag). Each snapshot has an
+immutable git tag of the same name as its Binder stub, `FROM` the
+snapshot's digest. Because that commit never changes, Binder's cache
+for it stays warm all month instead of resetting with every nightly.
+
 To stay current, bump the pin when a new snapshot appears. The newest
 snapshot for a version is the highest `<version>-YYYYMMDD` in the
-registry's tag list (`/v2/qubins/images/tags/list`). Each snapshot is
-the same image, with the same signature, as that night's `<version>`
-tag, so `cosign verify` (below) works on it too.
+registry's tag list (`/v2/qubins/images/tags/list`), or the first
+entry of that image's `snapshots` in [`versions.json`](#versionsjson-for-downstream-projects).
+Each snapshot is the same image, with the same signature, as that
+night's `<version>` tag, so `cosign verify` (below) works on it too.
+
+### versions.json (for downstream projects)
+
+[`https://qubins.org/versions.json`](https://qubins.org/versions.json)
+lists every published image with what a downstream project needs to
+pick, pin or check one. It is regenerated after every nightly and
+every publish. RasQberry, doQumentation and our own `/launch/`
+redirector read it, so it is treated as an interface:
+
+- Fields are only ever **added**. Removing or renaming a field, or
+  changing what one means, bumps `schema_version`. Check it, and
+  ignore fields you don't know.
+- Registry-derived fields (everything from `digest` down) are
+  best-effort: if GHCR can't be read during a deploy, they are omitted
+  for that image rather than guessed. Treat each as optional.
+- The site fetches it from the same origin. Cross-origin `fetch()`
+  works too: GitHub Pages serves it with `Access-Control-Allow-Origin: *`.
+
+```jsonc
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-10T05:15:42Z",
+  "latest_qiskit": "2.5",              // the minor latest-<flavor> points at
+  "images": [                          // newest minor first, then small, xl, xl-rise, xxl
+    {
+      "qiskit_minor": "2.5",
+      "flavor": "xl",                  // small | xl | xl-rise | xxl
+      "is_latest": true,               // qiskit_minor == latest_qiskit
+      "binder_tag": "2.5-xl",          // the tag, also the Binder stub branch
+      "docker_tag": "ghcr.io/qubins/images:2.5-xl",
+      "notes": "…",                    // optional caveat, shown as a footnote
+      "ai_transpiler": false,          // xxl only: has qiskit-ibm-transpiler
+      "digest": "sha256:fad5d385…",    // tonight's multi-arch index; moves nightly
+      "platforms": ["linux/amd64", "linux/arm64"],
+      "size_mb": 902.7,                // compressed download, amd64
+      "size_mb_arm64": 843.8,          // compressed download, arm64
+      "updated_at": "2026-10-09T19:26:07Z",  // build time
+      "qiskit_patch": "2.5.2",         // installed qiskit
+      "qiskit_ibm_runtime": "0.49.0",  // installed qiskit-ibm-runtime
+      "revision": "1391056…",          // commit of this repo that built it
+      "snapshots": [                   // newest first; [] before the first one
+        { "tag": "2.5-xl-20261008", "date": "2026-10-08",
+          "digest": "sha256:dd8f4f72…" }
+      ]
+    }
+  ]
+}
+```
+
+Pin a snapshot's `tag` or `digest`, never the top-level `digest`: that
+one is replaced by the next nightly and garbage-collected a few days
+later. Different flavors of one minor can ship different
+`qiskit_ibm_runtime` versions (2.5-small takes the newest; 2.5-xl is
+held back by `qiskit-serverless`), so check that field if your
+notebooks depend on a runtime API.
 
 ## Pull your own notebook repo (nbgitpuller)
 
@@ -280,7 +343,7 @@ list at `versions/<target>/requirements.txt`. The `build-matrix.yml`
 workflow has three stages:
 
 1. **build + scan** — for each `<target>`, build an image per
-   architecture on a native runner (`ubuntu-latest` for amd64,
+   architecture on a native runner (`ubuntu-24.04` for amd64,
    `ubuntu-24.04-arm` for arm64), load the result into the local
    docker daemon, and run Trivy against it (HIGH/CRITICAL with
    available fixes block the run). A final `RUN python -c 'import
@@ -303,7 +366,11 @@ workflow has three stages:
    Binder welcome notebook `START-HERE.ipynb` (from `binder-stub/`),
    which bare launches open.
    Targets matching the `LATEST_QISKIT` env var also get a
-   `latest-<flavor>` tag and stub branch.
+   `latest-<flavor>` tag and stub branch. The first scheduled run of
+   each month also publishes a `<target>-YYYYMMDD` snapshot tag, and
+   every run makes sure each snapshot in the registry has a matching
+   immutable git tag as its Binder stub (and deletes the git tag once
+   the snapshot is pruned).
 
 mybinder consumes the stub branch and pulls the pre-built image
 instead of rebuilding the dep tree from scratch (cold start ~30s).
@@ -346,6 +413,36 @@ Build provenance attestations are produced automatically by
 docker buildx imagetools inspect ghcr.io/qubins/images:<tag> \
   --format '{{ json .Provenance }}'
 ```
+
+### Image labels
+
+Every image says what it is, so you can check one you already have,
+offline, with `docker inspect --format '{{ json .Config.Labels }}' <image>`:
+
+| Label | Example | Meaning |
+|---|---|---|
+| `org.qubins.tag` | `2.5-xl` | build target (minor + flavor) |
+| `org.qubins.qiskit.patch` | `2.5.2` | installed qiskit |
+| `org.qubins.qiskit-ibm-runtime` | `0.49.0` | installed qiskit-ibm-runtime (empty if none) |
+| `org.opencontainers.image.version` | `2.5.2` | same as `qiskit.patch` |
+| `org.opencontainers.image.revision` | `1391056…` | commit of this repo that built it |
+| `org.opencontainers.image.created` | `2026-10-09T19:26:07Z` | build time |
+| `org.opencontainers.image.base.name` | `quay.io/jupyter/base-notebook:python-3.13` | base image |
+| `org.opencontainers.image.base.digest` | `sha256:4ef9cfd5…` | base image digest |
+| `org.opencontainers.image.source` | `https://github.com/QuBins/qiskit-images` | this repo |
+| `org.opencontainers.image.licenses` | `Apache-2.0` | license of this repo's build recipe |
+
+The image config's own `Created` field is not the build time: builds
+pin `SOURCE_DATE_EPOCH` to the last commit that touched an image input,
+so that unchanged layers keep their digests from night to night. Use
+the `image.created` label instead. A snapshot carries the labels of
+the nightly it was taken from; its date is in its tag.
+`org.qubins.tag`, the runtime label, `revision`, `licenses` and
+`base.*` exist on images built from 2026-10-10 on.
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md). To add a
+version, change a flavor or work on the site, see
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License & acknowledgements
 

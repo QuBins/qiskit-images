@@ -586,6 +586,23 @@ jobs:
             -c 'import qiskit; print(qiskit.__version__)')"
           echo "patch=${patch}" >> "$GITHUB_OUTPUT"
           echo "Captured qiskit==${patch}"
+          # Same for qiskit-ibm-runtime: flavors pin different runtimes
+          # within one Qiskit minor (2.5-small takes the newest, 2.5-xl
+          # is held by qiskit-serverless), and downstream needs to tell
+          # which API a tag has without starting it. Empty if absent.
+          runtime="$(docker run --rm --entrypoint python "$IMAGE_REF" -c '
+          from importlib.metadata import PackageNotFoundError, version
+          try:
+              print(version("qiskit-ibm-runtime"))
+          except PackageNotFoundError:
+              print("")')"
+          echo "runtime=${runtime}" >> "$GITHUB_OUTPUT"
+          echo "Captured qiskit-ibm-runtime==${runtime:-<none>}"
+          # The base image, from the Dockerfile's FROM line, split into
+          # the OCI base.name / base.digest pair.
+          from="$(awk '$1 == "FROM" { print $2; exit }' Dockerfile)"
+          echo "base_name=${from%@*}" >> "$GITHUB_OUTPUT"
+          echo "base_digest=${from#*@}" >> "$GITHUB_OUTPUT"
           # RFC3339 build time. Artifact Hub REQUIRES
           # org.opencontainers.image.created to index an image at all,
           # and buildx does not set it for us.
@@ -627,8 +644,21 @@ jobs:
           # created are mandatory there, the rest shape the listing.
           # They are plain OCI labels, so they cost nothing and are
           # equally useful to anyone inspecting the image directly.
+          #
+          # revision, licenses, base.* and the runtime label let anyone
+          # holding just an image (a Pi with no network, a scanner, a
+          # downstream update menu) answer "which commit built this,
+          # under which license, on which base, with which runtime API"
+          # via docker inspect. All of them live in the config, not in a
+          # layer, so they never cost a re-download.
           labels: |
             org.qubins.qiskit.patch=${{ steps.qversion.outputs.patch }}
+            org.qubins.qiskit-ibm-runtime=${{ steps.qversion.outputs.runtime }}
+            org.qubins.tag=${{ matrix.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.base.name=${{ steps.qversion.outputs.base_name }}
+            org.opencontainers.image.base.digest=${{ steps.qversion.outputs.base_digest }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=QuBins ${{ matrix.version }} — prebuilt Qiskit ${{ steps.qversion.outputs.patch }} environment
             org.opencontainers.image.created=${{ steps.qversion.outputs.created }}
@@ -916,7 +946,8 @@ jobs:
           start_here="${RUNNER_TEMP}/START-HERE.ipynb"
           cp binder-stub/START-HERE.ipynb "${start_here}"
 
-          sync_branch() {
+          # Commit a one-commit orphan stub for $2 on local branch $1.
+          stub_commit() {
             local branch="$1"
             local image="$2"
             git checkout --orphan "$branch"
@@ -928,6 +959,11 @@ jobs:
               "$image" > binder/Dockerfile
             git add binder/Dockerfile binder/START-HERE.ipynb
             git commit -m "Sync stub branch for $branch"
+          }
+
+          # Push a ref to origin, retried.
+          push_ref() {
+            local ref="$1"
             # Retry the push. On 2026-09-13 (run 34748081224) GitHub
             # rejected three of these concurrent force-pushes server-side
             #   remote: fatal error in commit_refs
@@ -941,16 +977,21 @@ jobs:
             # re-running it is idempotent.
             local attempt
             for attempt in 1 2 3; do
-              if git push -f origin "$branch"; then
+              if git push -f origin "$ref"; then
                 return 0
               fi
               if [ "$attempt" -lt 3 ]; then
-                echo "::warning::push of stub branch $branch failed (attempt $attempt); retrying in $((attempt * 10))s"
+                echo "::warning::push of stub $ref failed (attempt $attempt); retrying in $((attempt * 10))s"
                 sleep $((attempt * 10))
               fi
             done
-            echo "::error::push of stub branch $branch failed after 3 attempts"
+            echo "::error::push of stub $ref failed after 3 attempts"
             return 1
+          }
+
+          sync_branch() {
+            stub_commit "$1" "$2"
+            push_ref "$1"
           }
 
           REPO="ghcr.io/${OWNER_LC}/${IMAGE}"
@@ -959,4 +1000,61 @@ jobs:
           if [[ "${VERSION%-*}" == "${LATEST_QISKIT}" ]]; then
             flavor="${VERSION#*-}"
             sync_branch "latest-${flavor}" "${REPO}:latest-${flavor}"
+          fi
+
+          # Snapshot stubs. Monthly snapshot tags (<version>-YYYYMMDD,
+          # see the manifest step) are what we tell downstream to pin,
+          # so they should launch on Binder too. Each gets an immutable
+          # git *tag* of the same name, FROM the snapshot's digest:
+          # mybinder resolves tags like branches, and since the commit
+          # never moves, its Binder cache stays warm all month instead
+          # of going cold with every nightly re-push.
+          #
+          # Reconciled against the registry on every run rather than
+          # created only when a snapshot is published, so the first set
+          # (-20261008, made before this step existed) is backfilled
+          # and a failed push is retried the next night. Git tags whose
+          # snapshot the prune has removed are deleted, so Binder never
+          # tries to build FROM a digest that is gone. Best-effort:
+          # the images and stub branches are already published, so a
+          # problem here warns instead of failing the job.
+          path="${REPO#ghcr.io/}"
+          snap_re="^${VERSION//./\\.}-[0-9]{8}\$"
+          if ! ptok="$(curl -sf "https://ghcr.io/token?scope=repository:${path}:pull" | jq -er .token)" \
+             || ! reg="$(curl -sf -H "Authorization: Bearer ${ptok}" \
+                  "https://ghcr.io/v2/${path}/tags/list?n=10000" | jq -er '.tags[]')"; then
+            echo "::warning::${VERSION}: could not list registry tags; snapshot stubs not reconciled (retried next run)."
+            exit 0
+          fi
+          if ! git_tags="$(git ls-remote --tags --refs origin | awk '{ sub("refs/tags/", "", $2); print $2 }')"; then
+            echo "::warning::${VERSION}: could not list git tags; snapshot stubs not reconciled (retried next run)."
+            exit 0
+          fi
+          reg_snaps="$(grep -E "${snap_re}" <<<"${reg}" || true)"
+          git_snaps="$(grep -E "${snap_re}" <<<"${git_tags}" || true)"
+          failed=0
+          for snap in ${reg_snaps}; do
+            grep -Fxq "${snap}" <<<"${git_snaps}" && continue
+            if ! digest="$(docker buildx imagetools inspect "${REPO}:${snap}" --format '{{ json .Manifest }}' | jq -er .digest)"; then
+              echo "::warning::${snap}: could not resolve its digest; no snapshot stub tonight."
+              failed=1; continue
+            fi
+            stub_commit "stub-${snap}" "${REPO}:${snap}@${digest}"
+            git tag "${snap}"
+            if push_ref "refs/tags/${snap}"; then
+              echo "Created snapshot stub tag ${snap} (FROM ${REPO}:${snap}@${digest})"
+            else
+              failed=1
+            fi
+          done
+          for snap in ${git_snaps}; do
+            grep -Fxq "${snap}" <<<"${reg_snaps}" && continue
+            if git push origin ":refs/tags/${snap}"; then
+              echo "Deleted snapshot stub tag ${snap} (snapshot no longer in the registry)"
+            else
+              failed=1
+            fi
+          done
+          if [ "${failed}" -ne 0 ]; then
+            echo "::warning::${VERSION}: some snapshot stubs could not be reconciled; retried next run."
           fi
