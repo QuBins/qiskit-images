@@ -6,7 +6,22 @@ first, matching the build-matrix planner convention). The page JS
 consumes this at runtime to render the catalog table and to populate
 the URL generator's image dropdown.
 
-Schema (one entry per published image):
+The file is a public interface: RasQberry, doQumentation and the
+/launch/ redirector read it. Its shape is documented for consumers in
+the README ("versions.json"); keep that section, SCHEMA_VERSION and
+this docstring in step. Fields are only ever added; removing or
+renaming one, or changing its meaning, bumps SCHEMA_VERSION.
+
+Top level:
+
+    {
+      "schema_version": 1,
+      "generated_at":   "2026-10-10T05:15:42Z",
+      "latest_qiskit":  "2.5",
+      "images":         [ ... ]
+    }
+
+One entry per published image:
 
     {
       "qiskit_minor": "2.4",
@@ -14,11 +29,20 @@ Schema (one entry per published image):
       "is_latest":    true,      # current LATEST_QISKIT minor
       "binder_tag":   "2.4-small",
       "docker_tag":   "ghcr.io/qubins/images:2.4-small",
-      "notes":        "reduced set: ..."   # optional
-      "size_mb":      812.5,                  # multi-arch index, amd64 child
+      "notes":        "reduced set: ...",     # optional
+      "ai_transpiler": false,                 # xxl only
+      "digest":       "sha256:...",           # multi-arch index, tonight's
+      "platforms":    ["linux/amd64", "linux/arm64"],
+      "size_mb":      812.5,                  # download, amd64 child
       "size_mb_arm64": 790.1,                 # same, arm64 child
-      "updated_at":   "2026-05-15T04:34:21Z", # GHCR manifest push time
-      "qiskit_patch": "2.4.1",                # from OCI image.version label
+      "updated_at":   "2026-05-15T04:34:21Z", # image.created label
+      "qiskit_patch": "2.4.1",                # org.qubins.qiskit.patch
+      "qiskit_ibm_runtime": "0.45.1",         # org.qubins.qiskit-ibm-runtime
+      "revision":     "1391056...",           # image.revision (git SHA)
+      "snapshots": [                          # newest first; may be []
+        {"tag": "2.4-small-20261008", "date": "2026-10-08",
+         "digest": "sha256:..."}
+      ]
     }
 
 LATEST_QISKIT is read from build-matrix.yml's env block so we don't
@@ -27,16 +51,18 @@ need a second source of truth.
 `notes` overrides live in NOTES below; keep that in sync with the
 README footnotes when a flavor changes.
 
-`size_mb` and `updated_at` are best-effort enrichment from the public
+Everything from `digest` down is best-effort enrichment from the public
 GHCR registry. Anonymous reads work for the public package; if the
 fetch fails for any reason the fields are simply omitted from that
 image's record so the page still renders.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -120,6 +146,7 @@ WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "build-matrix.yml"
 DOCKER_PREFIX = "ghcr.io/qubins/images"
 GHCR_HOST = "ghcr.io"
 GHCR_REPO = "qubins/images"  # lowercase to match GHCR canonicalisation
+SCHEMA_VERSION = 1
 
 
 def latest_qiskit() -> str:
@@ -179,7 +206,7 @@ def _registry_token() -> str | None:
         return None
 
 
-def _ghcr_get(path: str, accept: str) -> dict | None:
+def _ghcr_get(path: str, accept: str, raw: bool = False):
     """GET /v2/<repo>/<path>. Follows redirects via _OPENER, which
     strips the Authorization header on any host change (GHCR 302s
     blob/manifest fetches to a separate CDN host) and refuses non-HTTPS
@@ -195,7 +222,8 @@ def _ghcr_get(path: str, accept: str) -> dict | None:
     )
     try:
         with _OPENER.open(req, timeout=20) as r:
-            return json.loads(r.read())
+            body = r.read()
+            return body if raw else json.loads(body)
     except urllib.error.HTTPError:
         return None
     except Exception:  # noqa: BLE001 — best-effort
@@ -216,6 +244,60 @@ def _manifest_size(manifest: dict) -> int:
     return total
 
 
+INDEX_ACCEPT = (
+    "application/vnd.oci.image.index.v1+json, "
+    "application/vnd.docker.distribution.manifest.list.v2+json"
+)
+
+
+def _index(tag: str) -> tuple[dict, str] | None:
+    """The multi-arch index for a tag and its digest. The digest is
+    the sha256 of the exact bytes the registry serves, which is what
+    `docker pull ...@sha256:` checks against."""
+    body = _ghcr_get(f"manifests/{tag}", INDEX_ACCEPT, raw=True)
+    if not body:
+        return None
+    try:
+        index = json.loads(body)
+    except ValueError:
+        return None
+    if not isinstance(index.get("manifests"), list):
+        return None
+    return index, "sha256:" + hashlib.sha256(body).hexdigest()
+
+
+_TAGS: list[str] | None = None
+
+
+def registry_tags() -> list[str]:
+    """Every tag in the package (GHCR serves them in one page)."""
+    global _TAGS
+    if _TAGS is None:
+        listing = _ghcr_get("tags/list?n=10000", "application/json")
+        _TAGS = (listing or {}).get("tags") or []
+    return _TAGS
+
+
+def fetch_snapshots(tag: str) -> list[dict] | None:
+    """Monthly snapshots of a tag, newest first, or None if the tag
+    list could not be read (so the field is omitted, not wrongly [])."""
+    tags = registry_tags()
+    if not tags:
+        return None
+    pat = re.compile(rf"^{re.escape(tag)}-(\d{{4}})(\d{{2}})(\d{{2}})$")
+    snaps = []
+    for t in sorted(tags, reverse=True):
+        m = pat.match(t)
+        if not m:
+            continue
+        snap = {"tag": t, "date": "-".join(m.groups())}
+        idx = _index(t)
+        if idx:
+            snap["digest"] = idx[1]
+        snaps.append(snap)
+    return snaps
+
+
 def fetch_image_meta(tag: str) -> dict:
     """Returns {size_mb, size_mb_arm64, updated_at, qiskit_patch} for
     the given tag, or {}.
@@ -230,12 +312,10 @@ def fetch_image_meta(tag: str) -> dict:
     to collect — a partial result is still useful and the page
     renders cleanly with omitted fields.
     """
-    index = _ghcr_get(
-        f"manifests/{tag}",
-        "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json",
-    )
-    if not index or not isinstance(index.get("manifests"), list):
+    idx = _index(tag)
+    if not idx:
         return {}
+    index, index_digest = idx
     digests: dict[str, str] = {}
     for m in index["manifests"]:
         p = m.get("platform") or {}
@@ -243,10 +323,13 @@ def fetch_image_meta(tag: str) -> dict:
             digests.setdefault(p["architecture"], m.get("digest"))
     if not digests.get("amd64"):
         return {}
+    out: dict = {
+        "digest": index_digest,
+        "platforms": [f"linux/{a}" for a in ("amd64", "arm64") if a in digests],
+    }
     manifest = _ghcr_get(f"manifests/{digests['amd64']}", MANIFEST_ACCEPT)
     if not manifest:
-        return {}
-    out: dict = {}
+        return out
     total = _manifest_size(manifest)
     if total > 0:
         out["size_mb"] = round(total / (1024 * 1024), 1)
@@ -287,6 +370,13 @@ def fetch_image_meta(tag: str) -> dict:
             patch = labels.get("org.qubins.qiskit.patch")
             if patch:
                 out["qiskit_patch"] = patch
+            # Both absent on images built before the labels existed.
+            runtime = labels.get("org.qubins.qiskit-ibm-runtime")
+            if runtime:
+                out["qiskit_ibm_runtime"] = runtime
+            revision = labels.get("org.opencontainers.image.revision")
+            if revision:
+                out["revision"] = revision
     return out
 
 
@@ -324,9 +414,14 @@ def main() -> None:
         if meta:
             item.update(meta)
             enriched += 1
+        snaps = fetch_snapshots(tag)
+        if snaps is not None:
+            item["snapshots"] = snaps
         out.append(item)
 
     payload = {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "latest_qiskit": latest,
         "images": out,
     }

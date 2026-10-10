@@ -18,9 +18,10 @@
 //   checked=1              skip the tag check (set by "continue anyway")
 //
 // Before redirecting, the tag is checked against ../versions.json, so
-// a typo, a retired minor or a snapshot tag (which has no stub branch,
-// so Binder can't launch it) gets a short page with the alternatives
-// instead of a cryptic mybinder error. The check never blocks a launch
+// a typo, a retired minor or a snapshot that doesn't exist gets a short
+// page with the alternatives instead of a cryptic mybinder error.
+// Monthly snapshots listed there launch like any other tag: each has an
+// immutable git tag of the same name as its Binder stub. The check never blocks a launch
 // it can't decide: if versions.json is slow or missing, we redirect.
 //
 // Precedence: `file` wins over `repo`; if neither, bare image launch
@@ -61,8 +62,12 @@
     if (!images.length) return null;
     const latest = data.latest_qiskit;
     const known = new Set(images.map((i) => i.binder_tag));
+    const snapshots = new Map();  // binder_tag -> snapshot tags, newest first
     for (const i of images) {
       if (i.qiskit_minor === latest) known.add(`latest-${i.flavor}`);
+      const snaps = (i.snapshots || []).map((s) => s.tag);
+      snapshots.set(i.binder_tag, snaps);
+      for (const t of snaps) known.add(t);
     }
     if (known.has(image)) return null;
 
@@ -70,9 +75,14 @@
     const m = image.match(/^(\d+)\.(\d+)-([a-z-]+?)(?:-(\d{8}))?$/);
     if (m && m[4] && known.has(`${m[1]}.${m[2]}-${m[3]}`)) {
       const current = `${m[1]}.${m[2]}-${m[3]}`;
+      const newest = (snapshots.get(current) || [])[0];
       return {
-        text: `${image} is a monthly snapshot. Snapshots are for pinning with Docker; mybinder can only launch the current build of each image.`,
-        choices: [{ label: `Open ${current} (current build)`, image: current }, latestXl],
+        text: `There is no snapshot ${image}. Snapshots are made on the first nightly of each month and kept for 12 months.`,
+        choices: [
+          ...(newest ? [{ label: `Open ${newest} (newest snapshot)`, image: newest }] : []),
+          { label: `Open ${current} (current build)`, image: current },
+          latestXl,
+        ],
       };
     }
     if (m) {
