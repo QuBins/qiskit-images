@@ -128,6 +128,71 @@ COPY versions /tmp/versions
 # 2.4-xxl arm64 build; the whole day's matrix was otherwise green.
 # Three attempts with linear backoff; the last one's output is the
 # error the build log shows.
+#
+# Two layers, not one (QuBins#179). With one pip layer, any upstream
+# release anywhere in the tree re-shipped all of it: on 2026-10-10 two
+# small packages (beartype, narwhals) moved and every xl re-shipped
+# 500-780 MB, 2.4-xxl amd64 3.7 GB. So:
+#
+#   1. heavy layer: resolve the full requirements once (pip --dry-run
+#      --report), then install only the big, slow-moving packages
+#      (HEAVY below), pinned to exactly the versions that resolution
+#      picked, with --no-deps: their small dependencies (fsspec,
+#      filelock, typing-extensions, ...) release far more often and
+#      would drag this layer along. Layer 2 installs those. Reproducible layers
+#      (SOURCE_DATE_EPOCH, see the build workflow) mean this layer keeps
+#      its digest until one of those versions really changes.
+#   2. everything else: the same requirements again. pip keeps the
+#      already-installed versions (they satisfy the same resolution), so
+#      this layer holds only the small, fast-moving rest and the floors.
+#      `pip check` at the end proves the two halves add up to one
+#      consistent environment.
+#
+# HEAVY was picked from a 2.5-xl layer listing (jaxlib alone is 350 MB,
+# the list below is ~80% of the bytes) plus the xxl GPU stack. The
+# Qiskit packages themselves stay in layer 2 on purpose: they are what
+# moves most often. Names are PEP 503 normalised; `nvidia-*` is a prefix.
+#
+# PIP_RESOLVE_DATE (YYYYMMDD, set once per build job) makes the GHA
+# layer cache miss here once a day. Without it, whether an image got
+# that night's package releases depended on whether its cache entry had
+# been evicted: on 2026-10-10, 2.5-xl amd64 and 2.5-xxl arm64 hit the
+# cache and silently kept the previous day's packages while every other
+# xl picked them up. Re-resolving costs build time only: when nothing
+# changed upstream, both layers come out byte-identical.
+ARG PIP_RESOLVE_DATE
+RUN pip_retry() { \
+      local attempt; \
+      for attempt in 1 2 3; do \
+        if pip "$@"; then return 0; fi; \
+        if [ "${attempt}" -lt 3 ]; then \
+          echo "pip attempt ${attempt} failed; retrying in $((attempt * 10))s" >&2; \
+          sleep $((attempt * 10)); \
+        fi; \
+      done; \
+      echo "pip failed after 3 attempts" >&2; \
+      return 1; \
+    }; \
+    echo "Resolving for ${QISKIT_VERSION} (resolve date ${PIP_RESOLVE_DATE:-unset})" \
+ && pip_retry install --no-cache-dir --dry-run --quiet --report /tmp/resolve.json \
+      -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
+ && HEAVY='numpy scipy pandas scikit-learn matplotlib fonttools pillow contourpy kiwisolver sympy symengine jax jaxlib ml-dtypes opt-einsum llvmlite numba pyscf h5py z3-solver cytoolz plotly networkx rustworkx cvxpy scs clarabel osqp highspy qdldl ecos pyarrow ray torch triton nvidia-*' \
+    python3 -B -c 'import json, os, re; \
+norm = lambda n: re.sub(r"[-_.]+", "-", n).lower(); \
+heavy = os.environ["HEAVY"].split(); \
+items = [i for i in json.load(open("/tmp/resolve.json"))["install"] if not i.get("is_direct")]; \
+pins = {norm(i["metadata"]["name"]): i["metadata"]["version"] for i in items}; \
+pick = [n for n in sorted(pins) if any(n == h or (h.endswith("*") and n.startswith(h[:-1])) for h in heavy)]; \
+open("/tmp/heavy.txt", "w").write("".join(f"{n}=={pins[n]}\n" for n in pick)); \
+print(f"heavy layer: {len(pick)} of {len(pins)} packages")' \
+ && if [ -s /tmp/heavy.txt ]; then \
+      pip_retry install --no-cache-dir --no-compile --no-deps -r /tmp/heavy.txt; \
+    fi \
+ && rm -f /tmp/resolve.json /tmp/heavy.txt \
+ && fix-permissions "${CONDA_DIR}"
+
+# Layer 2: the rest, then the floors (see above for both and for the
+# retry wrapper, repeated here because each RUN is its own shell).
 RUN pip_retry() { \
       local attempt; \
       for attempt in 1 2 3; do \
@@ -142,6 +207,7 @@ RUN pip_retry() { \
     }; \
     pip_retry -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
  && pip_retry --upgrade 'msgpack>=1.2.1' 'urllib3>=2.8.0' 'setuptools>=78.1.1' \
+ && pip check \
  && rm -rf /tmp/versions \
  && fix-permissions "${CONDA_DIR}" \
  && fix-permissions "/home/${NB_USER}"
