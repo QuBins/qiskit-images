@@ -69,11 +69,11 @@ Three flavors:
 
 Currently published: 15 multi-arch (amd64 + arm64) images — 6 Qiskit
 minors × {small, xl}, plus `2.4-xxl` and `2.5-xxl`, plus the
-special-purpose `2.1-xl-rise`. The
-latter is a bridge flavor (`2.1-xl` + the classic Notebook frontend +
-classic RISE) for slideshow notebooks whose interactive ipywidgets need
-classic RISE to render; launch it with `&ui=rise-classic`. It retires
-once [jupyterlab-rise renders ipywidgets](https://github.com/jupyterlab-contrib/rise/issues/119).
+special-purpose `2.1-xl-rise` (`2.1-xl` + classic RISE). Slideshow
+notebooks whose interactive ipywidgets need classic RISE to render
+launch with `&ui=rise-classic` on `2.5-xl`, which ships classic RISE
+too; `2.1-xl-rise` stays for old links and retires once
+[jupyterlab-rise renders ipywidgets](https://github.com/jupyterlab-contrib/rise/issues/119).
 The xl flavor is based on the [Qiskit-documentation notebook
 tester](https://github.com/Qiskit/documentation/tree/main/scripts/nb-tester);
 notebooks from the Qiskit documentation site should run unmodified.
@@ -153,7 +153,7 @@ you don't want to pin a version in the badge text.
 Optional: `&branch=BRANCH`, `&path=path/to/notebook.ipynb`. With a
 `path`, `&ui=rise` opens that notebook as a RISE slideshow instead of
 in JupyterLab. For slides with interactive widgets, use
-`image=2.1-xl-rise` with `&ui=rise-classic` (classic Notebook + classic
+`image=2.5-xl` with `&ui=rise-classic` (classic Notebook + classic
 RISE).
 
 **Open a single notebook on QuBins by raw URL** (xl images only):
