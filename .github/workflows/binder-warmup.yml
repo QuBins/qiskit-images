@@ -111,10 +111,18 @@ jobs:
         # Not warmed: 2.5-small, 2.4-xl (doQumentation Settings, no
         # launches), 2.1-xl (FwQ's GHZ-on-real-devices page and notebook
         # launcher, no launches), any -small, xxl and snapshot tags.
-        # Neither site runs a warm-up of its own (doQumentation dropped
-        # its 05:30 UTC one, 2026-10), so this is the only warmer. Revisit the
-        # list against mybinder's launch stats when a site changes its
-        # default.
+        # Neither site runs a warm-up of its own (doQumentation retired
+        # its 05:30 UTC one, 2026-10, relying on this job), so this is
+        # the only warmer. doQumentation tells us before it changes its
+        # default (DEFAULT_QISKIT_TAG); update DOQ_DEFAULT with it.
+        #
+        # Federation members. mybinder.org/build redirects each request
+        # to one member, so a plain warm lands on whichever it picks.
+        # doQumentation's default is warmed on each member directly
+        # (its launches have landed on 2i2c, BIDS and GESIS), which is
+        # what doQumentation's own job did for 2i2c and BIDS. The other
+        # targets get one warm via mybinder.org. Daily guarantee: the
+        # 16:00 UTC cron runs whether or not a nightly ran or passed.
         run: |
           set -euo pipefail
           mapfile -t all_versions < <(
@@ -129,7 +137,10 @@ jobs:
             echo "LATEST_QISKIT not found in build-matrix.yml." >&2
             exit 1
           fi
-          wanted=("${latest}-xl" '2.5-xl' '2.3-xl' '2.1-xl-rise')
+          DOQ_DEFAULT='2.5-xl'
+          MEMBERS=('https://2i2c.mybinder.org' 'https://bids.mybinder.org'
+                   'https://notebooks.gesis.org/binder')
+          wanted=("${DOQ_DEFAULT}" "${latest}-xl" '2.3-xl' '2.1-xl-rise')
           targets=()
           for w in "${wanted[@]}"; do
             # Fail loud if a target was dropped from the matrix, so we
@@ -149,10 +160,19 @@ jobs:
             done
             [ "${skip}" -eq 0 ] && targets+=("${w}")
           done
-          printf 'target: %s\n' "${targets[@]}"
+          # One line per warm: "<target> <binderhub base URL>".
+          lines=()
+          for t in "${targets[@]}"; do
+            if [ "${t}" = "${DOQ_DEFAULT}" ]; then
+              for m in "${MEMBERS[@]}"; do lines+=("${t} ${m}"); done
+            else
+              lines+=("${t} https://mybinder.org")
+            fi
+          done
+          printf 'warm: %s\n' "${lines[@]}"
           {
             echo "list<<EOF"
-            printf '%s\n' "${targets[@]}"
+            printf '%s\n' "${lines[@]}"
             echo EOF
           } >> "$GITHUB_OUTPUT"
 
@@ -213,7 +233,7 @@ jobs:
         #
         # This only extends how long we are willing to *watch*; it does
         # not make mybinder do more work. Worst case, every target timing
-        # out, is 3x900s + pacing, about 45min, against a median of a
+        # out, is 5x900s + pacing, about 75min, against a median of a
         # few minutes — fine for a twice-daily best-effort job and well
         # inside the 360min default job cap.
         #
@@ -225,7 +245,8 @@ jobs:
           repo_lc="${REPO_NAME,,}"
           warm_one() {
             local target="$1"
-            local url="https://mybinder.org/build/gh/${owner_lc}/${repo_lc}/${target}"
+            local base="$2"
+            local url="${base}/build/gh/${owner_lc}/${repo_lc}/${target}"
             # See the flavor-split budget note above. Matching on
             # *small* rather than listing versions keeps this correct as
             # the rolling window advances; everything else (xl, xl-rise,
@@ -238,7 +259,7 @@ jobs:
               *small*) max_time=300 ;;
               *)       max_time=900 ;;
             esac
-            echo "::group::Warming ${target} (budget ${max_time}s)"
+            echo "::group::Warming ${target} on ${base} (budget ${max_time}s)"
             echo "GET ${url}"
             local rc=0
             # awk exit codes: 0 = saw phase:ready, 2 = saw phase:failed,
@@ -268,7 +289,7 @@ jobs:
             # "curl: (23) Failure writing output to destination" to
             # stderr — that's expected and not an error condition.
             set +o pipefail
-            if curl -sSL -N --max-time "${max_time}" \
+            if curl -sSL -N --connect-timeout 30 --max-time "${max_time}" \
                   -H 'Accept: text/event-stream' \
                   "${url}" \
                 | awk '
@@ -284,17 +305,17 @@ jobs:
             set -o pipefail
             echo "::endgroup::"
             case "${rc}" in
-              0) echo "::notice::${target} reached phase=ready" ;;
-              2) echo "::warning::${target} reported phase=failed" ;;
-              3) echo "::warning::${target} stream ended without phase=ready (timeout or no events)" ;;
-              *) echo "::warning::${target} warm-up exited rc=${rc}" ;;
+              0) echo "::notice::${target} on ${base} reached phase=ready" ;;
+              2) echo "::warning::${target} on ${base} reported phase=failed" ;;
+              3) echo "::warning::${target} on ${base} stream ended without phase=ready (timeout or no events)" ;;
+              *) echo "::warning::${target} on ${base} warm-up exited rc=${rc}" ;;
             esac
             return "${rc}"
           }
           fail=0
           total=0
           first=1
-          while IFS= read -r target; do
+          while read -r target base; do
             [ -z "${target}" ] && continue
             total=$((total + 1))
             if [ "${first}" -eq 0 ]; then
@@ -302,7 +323,7 @@ jobs:
               sleep 10
             fi
             first=0
-            warm_one "${target}" || fail=$((fail + 1))
+            warm_one "${target}" "${base}" || fail=$((fail + 1))
           done <<< "${TARGETS}"
           echo "Warmed $((total - fail))/${total} targets."
           # Best-effort: never fail the workflow on warm-up issues.
