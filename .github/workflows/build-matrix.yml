@@ -1004,9 +1004,14 @@ jobs:
           REPO="ghcr.io/${OWNER_LC}/${IMAGE}"
           sync_branch "$VERSION" "${REPO}:${VERSION}"
 
+          # latest-<flavor> gets the very same commit as its version
+          # branch, not a stub of its own. mybinder caches images by
+          # commit, so latest-xl and 2.5-xl share one build: one warm-up
+          # (binder-warmup.yml) covers both, and a cold launch of one
+          # warms the other.
           if [[ "${VERSION%-*}" == "${LATEST_QISKIT}" ]]; then
             flavor="${VERSION#*-}"
-            sync_branch "latest-${flavor}" "${REPO}:latest-${flavor}"
+            push_ref "refs/heads/${VERSION}:refs/heads/latest-${flavor}"
           fi
 
           # Snapshot stubs. Monthly snapshot tags (<version>-YYYYMMDD,

@@ -1,11 +1,9 @@
 name: Binder warm-up
 
-# Pre-warm the mybinder.org image cache for the latest two Qiskit minors
-# (small + xl only — xxl is excluded; see "Resolve targets" below) plus
-# the `latest-{small,xl}` aliases and any explicitly pinned extra
-# targets (see EXTRA in "Resolve targets"), so the first user after a fresh image
-# publish lands on a warm cache instead of paying the ~30s cold-pull
-# cost. mybinder.org has no official warm-up API;
+# Pre-warm the mybinder.org image cache for the few targets people
+# actually launch (see "Resolve targets" below), so the first user after
+# a fresh image publish lands on a warm cache instead of waiting for a
+# cold pull, which for an xl can take minutes. mybinder.org has no official warm-up API;
 # we drive it via the public /build endpoint, which serves a
 # text/event-stream while it builds (or simply pulls, when the stub
 # branch already references a prebuilt GHCR image). Once we see
@@ -89,25 +87,34 @@ jobs:
 
       - name: Resolve targets
         id: targets
-        # Targets = the latest two Qiskit minors' small+xl variants
-        # (in scaffolder order) + the latest-{small,xl} aliases.
+        # Warm only what people actually launch. mybinder.org is a free
+        # shared service, and until 2026-10 we warmed eight targets
+        # twice a day: 598 warm-ups against 77 real launches in 30 days
+        # (2.3-xl 28, 2.5-xl 26, 2.1-xl-rise 17, latest-xl 3; 2.5-small,
+        # 2.4-small, 2.4-xl, latest-small and 2.1-xl none). A target
+        # left out still launches, it just builds cold for its first
+        # visitor on each server (xl median ~45s, tail up to ~9 min).
         #
-        # We derive these from build-matrix.yml's planner `ALL` bash
-        # array, but xxl is deliberately excluded: it's a large
-        # (~3.5 GB), amd64-only, niche flavor, and warming it every
-        # 12h is a poor use of mybinder's shared community infra.
-        # xxl images are still prebuilt in GHCR and launch fine — they
-        # just pay the one-off cold-pull on first use instead of being
-        # kept warm. So we filter `*-xxl` out *before* taking the
-        # first four entries; otherwise the interleaved xxl rows
-        # (`2.4-small 2.4-xl 2.4-xxl 2.3-small ...`) would shove the
-        # previous minor's xl out of the window.
-        #
-        # Before #31 this read jobs.build.strategy.matrix.version via
-        # yq; after #31 that key holds a fromJSON template and the
-        # canonical list moved into the planner job's `ALL` array.
-        # We extract it directly from the YAML rather than spinning up
-        # the planner just to read its output.
+        # Who uses what (checked with both sites, 2026-10-13):
+        #   <latest>-xl  latest-xl; build-matrix pushes the latest-*
+        #                stubs as the very same commit as their version
+        #                branch, and mybinder caches by commit, so one
+        #                warm covers both. fun-with-quantum.org links
+        #                latest-xl from its home page.
+        #   2.5-xl       doQumentation's default for every code cell and
+        #                its Binder links (src/config/jupyter.ts). Listed
+        #                explicitly so it stays warm after the next minor
+        #                takes over latest.
+        #   2.3-xl       a doQumentation Settings choice (its default
+        #                until the 2.4/2.5 bump); 28 launches.
+        #   2.1-xl-rise  every fun-with-quantum.org slideshow game.
+        # Not warmed: 2.5-small, 2.4-xl (doQumentation Settings, no
+        # launches), 2.1-xl (FwQ's GHZ-on-real-devices page and notebook
+        # launcher, no launches), any -small, xxl and snapshot tags.
+        # Neither site runs a warm-up of its own (doQumentation dropped
+        # its 05:30 UTC one, 2026-10), so this is the only warmer. Revisit the
+        # list against mybinder's launch stats when a site changes its
+        # default.
         run: |
           set -euo pipefail
           mapfile -t all_versions < <(
@@ -116,48 +123,31 @@ jobs:
             | grep -oE "'[^']+'" \
             | tr -d "'"
           )
-          # Drop xxl (and any future heavy flavor) — small + xl only.
-          warmable=()
-          for v in "${all_versions[@]}"; do
-            case "${v}" in
-              *-xxl) continue ;;
-              *) warmable+=("${v}") ;;
-            esac
-          done
-          if [ "${#warmable[@]}" -lt 4 ]; then
-            echo "Expected at least 4 small/xl versions in planner ALL array; got ${#warmable[@]}" >&2
-            echo "Has build-matrix.yml's planner block changed shape?" >&2
+          latest=$(sed -nE "s/^ *LATEST_QISKIT: *'([0-9.]+)'.*/\1/p" \
+            .github/workflows/build-matrix.yml)
+          if [ -z "${latest}" ]; then
+            echo "LATEST_QISKIT not found in build-matrix.yml." >&2
             exit 1
           fi
-          # First 4 of the xxl-filtered list = latest minor (small, xl)
-          # + previous minor (small, xl), in scaffolder order.
-          targets=("${warmable[0]}" "${warmable[1]}" \
-                   "${warmable[2]}" "${warmable[3]}" \
-                   "latest-small" "latest-xl")
-          # Pinned extras: targets warmed regardless of the rolling
-          # latest-two window because a known site depends on them.
-          # fun-with-quantum.org pins 2.1-xl (Lab launches) and
-          # 2.1-xl-rise (the classic-RISE slideshow games), both long
-          # aged out of the window — keep them warm.
-          extra=('2.1-xl' '2.1-xl-rise')
-          for e in "${extra[@]}"; do
-            # Fail loud if a pin is dropped from the matrix, so we
+          wanted=("${latest}-xl" '2.5-xl' '2.3-xl' '2.1-xl-rise')
+          targets=()
+          for w in "${wanted[@]}"; do
+            # Fail loud if a target was dropped from the matrix, so we
             # never silently warm a nonexistent (404) image.
             found=0
             for v in "${all_versions[@]}"; do
-              [ "${v}" = "${e}" ] && found=1 && break
+              [ "${v}" = "${w}" ] && found=1 && break
             done
             if [ "${found}" -eq 0 ]; then
-              echo "Pinned warm-up target '${e}' not found in build-matrix.yml ALL array." >&2
-              echo "Was it dropped from the matrix? Update the 'extra' list." >&2
+              echo "Warm-up target '${w}' not found in build-matrix.yml ALL array." >&2
+              echo "Was it dropped from the matrix? Update 'wanted'." >&2
               exit 1
             fi
-            # Dedup: skip if the window already covers it.
             skip=0
-            for t in "${targets[@]}"; do
-              [ "${t}" = "${e}" ] && skip=1 && break
+            for t in "${targets[@]+"${targets[@]}"}"; do
+              [ "${t}" = "${w}" ] && skip=1 && break
             done
-            [ "${skip}" -eq 0 ] && targets+=("${e}")
+            [ "${skip}" -eq 0 ] && targets+=("${w}")
           done
           printf 'target: %s\n' "${targets[@]}"
           {
@@ -223,8 +213,8 @@ jobs:
         #
         # This only extends how long we are willing to *watch*; it does
         # not make mybinder do more work. Worst case, every target timing
-        # out, is 3x300s + 5x900s + pacing, about 90min, against a median
-        # well under 15min — fine for a twice-daily best-effort job and well
+        # out, is 3x900s + pacing, about 45min, against a median of a
+        # few minutes — fine for a twice-daily best-effort job and well
         # inside the 360min default job cap.
         #
         # 10s pacing between targets to be polite to a shared
