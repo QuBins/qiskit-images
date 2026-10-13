@@ -141,3 +141,9 @@ qiskit-device-benchmarking @ git+https://github.com/qiskit-community/qiskit-devi
 # Same pins and reasons as versions/2.1-xl-rise/requirements.txt.
 notebook>=7
 rise==5.7.1
+# The games' widgets. 2.1-xl gets ipywidgets transitively (8.1.9, with
+# widgetsnbextension 4.0.16 for the classic frontend and
+# jupyterlab_widgets for Lab); nothing in 2.5-xl pulls it in, so the
+# first widget cell of every game failed with ModuleNotFoundError
+# (FwQ test, 2026-10-13). Same 8.x line as 2.1-xl-rise.
+ipywidgets>=8.1,<9
