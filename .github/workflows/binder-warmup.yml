@@ -138,8 +138,10 @@ jobs:
             exit 1
           fi
           DOQ_DEFAULT='2.5-xl'
+          # The federation's hosts, as listed under federationRedirect in
+          # jupyterhub/mybinder.org-deploy config/prod.yaml (2026-10-13).
           MEMBERS=('https://2i2c.mybinder.org' 'https://bids.mybinder.org'
-                   'https://notebooks.gesis.org/binder')
+                   'https://gesis.mybinder.org')
           wanted=("${DOQ_DEFAULT}" "${latest}-xl" '2.3-xl' '2.1-xl-rise')
           targets=()
           for w in "${wanted[@]}"; do
