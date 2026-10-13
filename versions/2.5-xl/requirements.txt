@@ -129,3 +129,15 @@ qiskit-mitigation~=0.1.1
 # build time, which the xl/xxl/rise apt layer already provides.
 # Dependabot cannot track a VCS URL, so bumping it is manual.
 qiskit-device-benchmarking @ git+https://github.com/qiskit-community/qiskit-device-benchmarking.git@aff6064fe5079df572b807b1ee5c9e06ea74fa13
+
+# Classic RISE, so the Fun-with-Quantum slideshow games (classic RISE +
+# interactive ipywidgets, launched with ui=rise-classic) run on this
+# image instead of the old 2.1-xl-rise, and mybinder only has to keep
+# this one image warm for them. jupyterlab-rise (in _xl-base.txt) renders
+# ipywidgets >=8 as text (jupyterlab-contrib/rise#119, still open, no
+# release since 2024-12). nbclassic ships in the base image already; the
+# Dockerfile enables autolaunch + its watchdog wherever classic RISE is
+# installed. Only the classic /nbclassic/ frontend is affected, not Lab.
+# Same pins and reasons as versions/2.1-xl-rise/requirements.txt.
+notebook>=7
+rise==5.7.1

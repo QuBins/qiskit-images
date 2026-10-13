@@ -237,7 +237,7 @@ RUN us_dir="$(python3 -B -c 'import os, nbclassic; print(os.path.join(os.path.di
     fi \
  && rm -rf /tmp/underscore-1.13.8
 
-# rise flavor: auto-start the RISE slideshow on launch. RISE layers its
+# Classic RISE images: auto-start the RISE slideshow on launch. RISE layers its
 # `autolaunch` setting (lowest -> highest priority) as: hardwired default
 # (off) -> this system nbconfig -> the notebook's own rise/livereveal
 # metadata. So this makes autostart the image default while any notebook
@@ -247,12 +247,17 @@ RUN us_dir="$(python3 -B -c 'import os, nbclassic; print(os.path.join(os.path.di
 # fixes slideshow notebooks whose .ipynb omits the flag (e.g. GHZ-Game)
 # without a per-notebook edit. Config filename must be `rise.json` — the
 # name of the RISE nbconfig ConfigSection.
-RUN if [[ "${QISKIT_VERSION}" == *-rise ]]; then \
+#
+# "Classic RISE installed" is the condition, not the flavor name: besides
+# the -rise flavor, 2.5-xl ships classic RISE for the Fun-with-Quantum
+# games (see versions/2.5-xl/requirements.txt). Both settings act only in
+# the classic Notebook frontend, never in JupyterLab.
+RUN if python3 -B -c 'import importlib.metadata as m; m.version("rise")' 2>/dev/null; then \
       mkdir -p "${CONDA_DIR}/etc/jupyter/nbconfig" \
       && printf '%s\n' '{"autolaunch": true}' > "${CONDA_DIR}/etc/jupyter/nbconfig/rise.json" ; \
     fi
 
-# rise flavor: cold-cache autolaunch watchdog (QuBins#108). RISE's
+# Classic RISE images: cold-cache autolaunch watchdog (QuBins#108). RISE's
 # autolaunch is a one-shot chain (main.js ~L1353) that races cold asset
 # loads and misses on the *first* page load, but works on every reload.
 # Ship a tiny nbextension — installed + enabled exactly the way RISE
@@ -261,9 +266,9 @@ RUN if [[ "${QISKIT_VERSION}" == *-rise ]]; then \
 # slideshow a beat after load iff RISE itself would have and we're not
 # already presenting. Full rationale in docker/rise-autolaunch/main.js.
 # The JS is added to the build context for every flavor (a ~3 KB file)
-# but only installed + enabled for *-rise images.
+# but only installed + enabled where classic RISE is (see above).
 COPY docker/rise-autolaunch/main.js /tmp/rise-autolaunch-main.js
-RUN if [[ "${QISKIT_VERSION}" == *-rise ]]; then \
+RUN if python3 -B -c 'import importlib.metadata as m; m.version("rise")' 2>/dev/null; then \
       mkdir -p "${CONDA_DIR}/share/jupyter/nbextensions/rise-autolaunch" \
                "${CONDA_DIR}/etc/jupyter/nbconfig/notebook.d" \
       && cp /tmp/rise-autolaunch-main.js \

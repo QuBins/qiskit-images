@@ -186,9 +186,11 @@ jobs:
                   if echo "${changed}" | grep -qE '^versions/_xl-base\.txt$'; then
                     xl_base_changed=1
                   fi
-                  # The rise-flavor autolaunch watchdog lives under docker/
-                  # and is COPYed into every *-rise image by the Dockerfile,
-                  # so a change there must rebuild all -rise flavors.
+                  # The classic-RISE autolaunch watchdog lives under docker/
+                  # and is installed into every image that ships classic
+                  # RISE (the -rise flavors, plus any target whose
+                  # requirements pin rise==, e.g. 2.5-xl), so a change
+                  # there must rebuild those.
                   docker_changed=0
                   if echo "${changed}" | grep -qE '^docker/'; then
                     docker_changed=1
@@ -217,8 +219,9 @@ jobs:
                         continue
                       fi
                     fi
-                    # The docker/ watchdog is baked into every -rise image.
-                    if [ "${docker_changed}" -eq 1 ] && [[ "${v}" == *-rise ]]; then
+                    # The docker/ watchdog is baked into every classic-RISE image.
+                    if [ "${docker_changed}" -eq 1 ] \
+                       && { [[ "${v}" == *-rise ]] || grep -qE '^rise==' "versions/${v}/requirements.txt" 2>/dev/null; }; then
                       selected+=("${v}")
                       continue
                     fi

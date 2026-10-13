@@ -13,7 +13,8 @@
 //   ui=rise-classic        repo loader only, needs path: land in the
 //                          *classic* Notebook frontend + classic RISE
 //                          (renders interactive ipywidgets in slides).
-//                          Requires a rise-capable image (e.g. 2.1-xl-rise).
+//                          Requires a classic-RISE image: any -rise flavor,
+//                          or 2.5-xl (see CLASSIC_RISE below).
 //   file=<raw url>         single-file loader (jupyterlab-open-url-parameter)
 //   checked=1              skip the tag check (set by "continue anyway")
 //
@@ -45,6 +46,9 @@
   // future refactor can't turn this into an open redirect. Anything
   // off-shape falls back to the safe default.
   const TAG_RE = /^[a-z0-9][a-z0-9._-]{0,40}$/;
+  // Images that ship classic RISE (ui=rise-classic). Keep in step with
+  // docs/app.js and the requirements files that pin rise==.
+  const CLASSIC_RISE = /^(?:.+-rise(?:-\d{8})?|2\.5-xl)$/;
   let image = (params.get("image") || "latest-xl").trim();
   if (!TAG_RE.test(image)) image = "latest-xl";
   const repo   = params.get("repo");
@@ -185,9 +189,11 @@
       note = `${image} can't load notebooks from a repo or URL, so this opens ${upgraded} instead.`;
       image = upgraded;
     }
-    // Classic RISE only ships in the -rise flavor. Every xl/xxl has
+    // Classic RISE ships in the -rise flavors and in 2.5-xl (for the
+    // Fun-with-Quantum games). Only the live 2.5-xl tag: its snapshots
+    // up to 2026-10 predate classic RISE. Every xl/xxl has
     // jupyterlab-rise, so fall back to that presenter elsewhere.
-    if (ui === "rise-classic" && !/-rise(-\d{8})?$/.test(image)) ui = "rise";
+    if (ui === "rise-classic" && !CLASSIC_RISE.test(image)) ui = "rise";
 
     let url;
     if (file) {
