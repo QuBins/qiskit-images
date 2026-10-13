@@ -435,8 +435,9 @@ offline, with `docker inspect --format '{{ json .Config.Labels }}' <image>`:
 | `org.opencontainers.image.licenses` | `Apache-2.0` | license of this repo's build recipe |
 
 The image config's own `Created` field is not the build time: builds
-pin `SOURCE_DATE_EPOCH` to the last commit that touched an image input,
-so that unchanged layers keep their digests from night to night. Use
+pin `SOURCE_DATE_EPOCH` to the last commit that touched that image's
+inputs (the Dockerfile, `docker/`, and its own requirements files), so
+that unchanged layers keep their digests from night to night. Use
 the `image.created` label instead. A snapshot carries the labels of
 the nightly it was taken from; its date is in its tag.
 `org.qubins.tag`, the runtime label, `revision`, `licenses` and

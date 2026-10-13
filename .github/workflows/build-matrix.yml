@@ -302,14 +302,43 @@ jobs:
       # test run. A layer now changes only when its content does, e.g.
       # the pip layer when pip resolves a new version of something.
       #
+      # The epoch is per image: Dockerfile, docker/, and this target's
+      # requirements with everything it pulls in via -r/-c (e.g.
+      # 2.5-xxl -> 2.5-xl -> _xl-base.txt). Until 2026-10 it covered all
+      # of versions/, so a package bump in one image re-stamped every
+      # layer of every image (all ~30 re-shipped, Pis included). The
+      # COPY of versions/ still changes with any edit, but that layer
+      # is a few KB, and the rebuilt layers after it come out identical.
+      #
       # Side effect: the image config's `created` is that epoch, not
       # the build time. The build time stays in the
       # org.opencontainers.image.created label (set at publish), which
       # build-pages-data.py and Artifact Hub read.
       - name: Reproducible-layer epoch
+        env:
+          VERSION: ${{ matrix.version }}
         run: |
           set -euo pipefail
-          epoch="$(git log -1 --format=%ct -- Dockerfile versions docker)"
+          mapfile -t inputs < <(python3 - "${VERSION}" <<'PY'
+          import os, re, sys
+          start = os.path.normpath(f"versions/{sys.argv[1]}/requirements.txt")
+          out, todo, seen = {"Dockerfile", "docker", os.path.dirname(start)}, [start], set()
+          while todo:
+              f = todo.pop()
+              if f in seen:
+                  continue
+              seen.add(f)
+              out.add(f)
+              with open(f, encoding="utf-8") as fh:
+                  for line in fh:
+                      m = re.match(r"\s*-[rc]\s+(\S+)", line)
+                      if m:
+                          todo.append(os.path.normpath(os.path.join(os.path.dirname(f), m.group(1))))
+          print("\n".join(sorted(out)))
+          PY
+          )
+          echo "Epoch inputs: ${inputs[*]}"
+          epoch="$(git log -1 --format=%ct -- "${inputs[@]}")"
           echo "SOURCE_DATE_EPOCH=${epoch}" >> "$GITHUB_ENV"
           echo "SOURCE_DATE_EPOCH=${epoch} ($(date -u -d "@${epoch}" +%FT%TZ))"
           # Once per job, not per build step: the push step must hit the
