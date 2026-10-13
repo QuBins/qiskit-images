@@ -585,13 +585,14 @@
       const repoUrl  = det.repoUrl || document.getElementById("launch-url").value.trim();
       // RISE presenter needs a concrete .ipynb path (applyDetection has
       // already disabled + cleared the toggle when the path isn't one).
-      // On xl-rise, use its classic presenter (interactive widgets in
-      // slides); launch.js turns ui=rise into the right urlpath.
+      // On a classic-RISE image (xl-rise, 2.5-xl), use the classic
+      // presenter (interactive widgets in slides); launch.js turns ui
+      // into the right urlpath. Keep in step with CLASSIC_RISE there.
       const rise = document.getElementById("launch-rise").checked && path.endsWith(".ipynb");
       launchParams.set("repo", repoUrl);
       if (branch) launchParams.set("branch", branch);
       if (path)   launchParams.set("path", path);
-      if (rise)   launchParams.set("ui", /-rise$/.test(image) ? "rise-classic" : "rise");
+      if (rise)   launchParams.set("ui", /^(?:.+-rise|2\.5-xl)$/.test(image) ? "rise-classic" : "rise");
     }
     const url = `${PAGES}/launch/?${launchParams.toString()}`;
     out.value = url;
