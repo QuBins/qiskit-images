@@ -13,8 +13,8 @@
 # ships in xl/xxl/rise flavors — hence the floor lives in this xl-only file
 # rather than the Dockerfile's all-flavor pip-upgrade line. A patch bump,
 # in range of Ray/serverless's aiohttp caps. Drop once the pinned ecosystem
-# resolves aiohttp >=3.14.3 on its own. Added 2026-08-06.
-aiohttp>=3.14.3
+# resolves aiohttp >=3.14.4 on its own. Added 2026-08-06.
+aiohttp>=3.14.4
 
 ffsim; sys.platform != 'win32'
 jupyterlab-open-url-parameter
