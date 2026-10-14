@@ -129,15 +129,39 @@ reading.
 the repo or notebook URL, pick an image, copy the launch link (and the
 badge Markdown, if you want one).
 
+### Which tag should I link?
+
+| You want | Link to | Kept warm on mybinder | What changes |
+|---|---|---|---|
+| Fastest start, always the newest Qiskit | `latest-xl` | yes | jumps to each new Qiskit minor, which can break notebooks |
+| A fixed Qiskit minor with current fixes (the usual pick) | the newest minor's xl, now `2.5-xl` | yes, while it is the newest minor | patch releases and security fixes, nightly |
+| An exact, frozen environment (a course, a release) | a monthly snapshot, e.g. `2.5-xl-20261008` | no | never; kept for 12 months ([Pinning](#pinning-an-image-downstream-projects)) |
+
+"Kept warm" means a scheduled job builds the image on mybinder.org's
+servers after every nightly and again each afternoon, so readers don't
+wait for that build. mybinder is a free, shared service, so we warm
+only the images people actually launch: the newest minor's xl (which
+`latest-xl` shares) and a few others with steady traffic, listed in
+[`binder-warmup.yml`](.github/workflows/binder-warmup.yml). Any other
+tag launches too; its first reader on each mybinder server waits a few
+minutes longer while it is built. Even a warm image can take a minute
+or more on a server machine that hasn't pulled it yet.
+
+Older minors (`2.4-xl`, `2.3-xl`, ...) keep being rebuilt nightly, but
+there is no fixed retirement schedule. When a minor is retired, it is
+announced in this README (see [Versions](#versions)); its tags stay
+pullable but are no longer rebuilt or patched, as happened with
+[1.4](https://github.com/QuBins/qiskit-images/issues/162).
+
 ### What the badges look like
 
-![launch on QuBins 2.4-xl](https://qubins.org/badges/launch-on-qubins-2.4-xl.svg)
+![launch on QuBins 2.5-xl](https://qubins.org/badges/launch-on-qubins-2.5-xl.svg)
 &nbsp; — notebook launch (repo or single file)
 
-![launch QuBins 2.4-xl](https://qubins.org/badges/launch-qubins-2.4-xl.svg)
+![launch QuBins 2.5-xl](https://qubins.org/badges/launch-qubins-2.5-xl.svg)
 &nbsp; — bare-image launch
 
-The right half changes per image (`2.4-xl`, `latest-small`, etc.), or
+The right half changes per image (`2.5-xl`, `latest-small`, etc.), or
 use generic [`launch-on-qubins.svg`](https://qubins.org/badges/launch-on-qubins.svg)
 / [`launch-qubins.svg`](https://qubins.org/badges/launch-qubins.svg) if
 you don't want to pin a version in the badge text.
@@ -147,7 +171,7 @@ you don't want to pin a version in the badge text.
 **Open a whole repo on QuBins** (nbgitpuller clones it on launch):
 
 ```markdown
-[![launch on QuBins 2.4-xl](https://qubins.org/badges/launch-on-qubins-2.4-xl.svg)](https://qubins.org/launch/?image=2.4-xl&repo=https://github.com/YOU/YOUR-REPO)
+[![launch on QuBins 2.5-xl](https://qubins.org/badges/launch-on-qubins-2.5-xl.svg)](https://qubins.org/launch/?image=2.5-xl&repo=https://github.com/YOU/YOUR-REPO)
 ```
 
 Optional: `&branch=BRANCH`, `&path=path/to/notebook.ipynb`. With a
@@ -159,7 +183,7 @@ RISE).
 **Open a single notebook on QuBins by raw URL** (xl images only):
 
 ```markdown
-[![launch on QuBins 2.4-xl](https://qubins.org/badges/launch-on-qubins-2.4-xl.svg)](https://qubins.org/launch/?image=2.4-xl&file=https://raw.githubusercontent.com/YOU/YOUR-REPO/main/notebook.ipynb)
+[![launch on QuBins 2.5-xl](https://qubins.org/badges/launch-on-qubins-2.5-xl.svg)](https://qubins.org/launch/?image=2.5-xl&file=https://raw.githubusercontent.com/YOU/YOUR-REPO/main/notebook.ipynb)
 ```
 
 **Bare launch into the image** (no preloaded notebook):
@@ -375,7 +399,9 @@ workflow has three stages:
    the snapshot is pruned).
 
 mybinder consumes the stub branch and pulls the pre-built image
-instead of rebuilding the dep tree from scratch (cold start ~30s).
+instead of rebuilding the dep tree from scratch. A launch on a
+machine that already has the image takes seconds; otherwise pulling it
+(an xl is a few GB) takes a minute or more.
 
 ### Staying current
 
