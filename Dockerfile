@@ -90,12 +90,15 @@ RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl || "${QISK
            /var/cache/fontconfig/* /root/.cache ; \
     fi
 
-# Copy the whole versions/ tree so pip can resolve the relative
-# `-r ../_xl-base.txt` reference inside each xl requirements file.
-# small flavors don't reference _xl-base.txt; copying it is harmless
-# (a single ~250-byte text file) and the layer cache gets keyed on
-# ${QISKIT_VERSION} via the next RUN anyway.
-COPY versions /tmp/versions
+# The two pip layers below bind-mount the whole versions/ tree at
+# /tmp/versions (so pip can resolve the relative `-r ../_xl-base.txt`
+# and `-r ../<minor>-xl/requirements.txt` includes) instead of COPYing
+# it. A COPY put every image's requirements file into a layer of every
+# image, so editing one image's requirements gave all images a new
+# digest at the next build: new stub-branch commits for every tag and
+# a cold rebuild of each on mybinder. A bind mount leaves no files in
+# the image; which inputs matter per image is the epoch step's job
+# (build-matrix.yml).
 # Three post-install repair floors.
 #
 # Base digest 4ef9cfd5 (Ubuntu 26.04.1) is clean for all of these --
@@ -161,7 +164,8 @@ COPY versions /tmp/versions
 # xl picked them up. Re-resolving costs build time only: when nothing
 # changed upstream, both layers come out byte-identical.
 ARG PIP_RESOLVE_DATE
-RUN pip_retry() { \
+RUN --mount=type=bind,source=versions,target=/tmp/versions \
+    pip_retry() { \
       local attempt; \
       for attempt in 1 2 3; do \
         if pip "$@"; then return 0; fi; \
@@ -193,7 +197,8 @@ print(f"heavy layer: {len(pick)} of {len(pins)} packages")' \
 
 # Layer 2: the rest, then the floors (see above for both and for the
 # retry wrapper, repeated here because each RUN is its own shell).
-RUN pip_retry() { \
+RUN --mount=type=bind,source=versions,target=/tmp/versions \
+    pip_retry() { \
       local attempt; \
       for attempt in 1 2 3; do \
         if pip install --no-cache-dir --no-compile "$@"; then return 0; fi; \
@@ -208,7 +213,6 @@ RUN pip_retry() { \
     pip_retry -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
  && pip_retry --upgrade 'msgpack>=1.2.1' 'urllib3>=2.8.0' 'setuptools>=78.1.1' \
  && pip check \
- && rm -rf /tmp/versions \
  && fix-permissions "${CONDA_DIR}" \
  && fix-permissions "/home/${NB_USER}"
 
