@@ -107,10 +107,12 @@ jobs:
         #                takes over latest.
         #   2.3-xl       a doQumentation Settings choice (its default
         #                until the 2.4/2.5 bump); 28 launches.
-        #   2.1-xl-rise  every fun-with-quantum.org slideshow game.
+        #                2.5-xl is also where the fun-with-quantum.org
+        #                slideshow games (ui=rise-classic) and its former
+        #                2.1-xl links live since 2026-10 (#186, #190).
         # Not warmed: 2.5-small, 2.4-xl (doQumentation Settings, no
-        # launches), 2.1-xl (FwQ's GHZ-on-real-devices page and notebook
-        # launcher, no launches), any -small, xxl and snapshot tags.
+        # launches), 2.1-xl and 2.1-xl-rise (FwQ moved off them; old
+        # links still launch, cold), any -small, xxl and snapshot tags.
         # Neither site runs a warm-up of its own (doQumentation retired
         # its 05:30 UTC one, 2026-10, relying on this job), so this is
         # the only warmer. doQumentation tells us before it changes its
@@ -142,7 +144,7 @@ jobs:
           # jupyterhub/mybinder.org-deploy config/prod.yaml (2026-10-13).
           MEMBERS=('https://2i2c.mybinder.org' 'https://bids.mybinder.org'
                    'https://gesis.mybinder.org')
-          wanted=("${DOQ_DEFAULT}" "${latest}-xl" '2.3-xl' '2.1-xl-rise')
+          wanted=("${DOQ_DEFAULT}" "${latest}-xl" '2.3-xl')
           targets=()
           for w in "${wanted[@]}"; do
             # Fail loud if a target was dropped from the matrix, so we
