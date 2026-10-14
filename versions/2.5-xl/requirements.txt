@@ -111,7 +111,7 @@ imbalanced-learn~=0.14.2
 # x86_64 and aarch64, so it installs on 3.13 without a toolchain;
 # qiskit-mitigation is pure python. Both checked against PyPI for
 # arch, interpreter tag and requires_python before adding.
-qrmi~=0.25.1
+qrmi~=0.26.0
 qiskit-mitigation~=0.1.1
 # mthree is upstream's one package we cannot take. It publishes
 # manylinux wheels for both arches but only up to cp312, with no abi3
