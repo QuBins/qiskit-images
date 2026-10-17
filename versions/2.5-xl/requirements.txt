@@ -146,4 +146,4 @@ rise==5.7.1
 # jupyterlab_widgets for Lab); nothing in 2.5-xl pulls it in, so the
 # first widget cell of every game failed with ModuleNotFoundError
 # (FwQ test, 2026-10-13). Same 8.x line as 2.1-xl-rise.
-ipywidgets>=8.1,<9
+ipywidgets>=8.1.9,<9
