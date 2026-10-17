@@ -22,9 +22,9 @@ updates:
   # pinned for historical reproducibility and shouldn't get bumps.
   - package-ecosystem: pip
     directories:
-      - /versions/2.5-small
-      - /versions/2.5-xl
-      - /versions/2.5-xxl
+      - /versions/2.6-small
+      - /versions/2.6-xl
+      - /versions/2.6-xxl
     schedule:
       interval: weekly
     ignore:
