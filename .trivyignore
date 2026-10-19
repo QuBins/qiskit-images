@@ -117,6 +117,21 @@ CVE-2026-54513
 # the xl serverless pin moves to a Ray that already has it.
 CVE-2026-69244
 
+# CVE-2026-111064 + GHSA-2g87-pp6c-29x5 - aiohttp HIGH (fixed 3.14.4).
+#
+# Same vendored copy as CVE-2026-69244 above, now at 3.14.3:
+#   opt/conda/lib/python3.13/site-packages/ray/_private/runtime_env/agent/thirdparty_files/aiohttp-3.14.3.dist-info
+# Found in the frozen-minor xl/xxl images (2.0-2.4, Ray 2.59 via their
+# qiskit-serverless pins); 2.5/2.6 ship a Ray that passes. The top-level
+# aiohttp is floored to >=3.14.4 in every image (Dockerfile post-install
+# floors, and versions/_xl-base.txt), so this suppression only matters for
+# Ray's internal runtime_env agent, same rationale as above.
+#
+# Drop with CVE-2026-69244 once Ray rebundles aiohttp >=3.14.4, or once the
+# frozen minors move to a Ray that has it.
+CVE-2026-111064
+GHSA-2g87-pp6c-29x5
+
 # CVE-2026-54399 - Apache HttpCore5 HIGH (flagged httpcore5 5.0.2; fixed in
 # 5.4.3 / 5.5-beta2).
 #
