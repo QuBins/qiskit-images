@@ -298,6 +298,21 @@ RUN if python3 -B -c 'import importlib.metadata as m; m.version("rise")' 2>/dev/
     fi \
  && rm -f /tmp/rise-autolaunch-main.js
 
+# Thread pools sized to the container's CPU limit (docker/qubins_threads.py).
+# On mybinder a pod sees the node's 48 CPUs but may use one, and Aer,
+# OpenBLAS and OpenMP each started 48 threads: a hello-world Estimator
+# job took 103 s instead of 1.3 s. A .pth file runs the module at every
+# interpreter start, so it covers Jupyter and every kernel however the
+# server is launched (Binder bypasses start.sh and its hooks). Without
+# a CPU limit it sets nothing. Hash-checked .pyc, like compile-pyc.py.
+COPY docker/qubins_threads.py /tmp/qubins_threads.py
+RUN site="$(python -B -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" \
+ && install -m 644 /tmp/qubins_threads.py "${site}/qubins_threads.py" \
+ && printf '%s\n' 'import qubins_threads' > "${site}/qubins-threads.pth" \
+ && chmod 644 "${site}/qubins-threads.pth" \
+ && python -B -c 'import py_compile, sys; py_compile.compile(sys.argv[1], invalidation_mode=py_compile.PycInvalidationMode.CHECKED_HASH, doraise=True)' "${site}/qubins_threads.py" \
+ && rm -f /tmp/qubins_threads.py
+
 # Smoke test: catches wheels that resolve cleanly but break at import
 # time (e.g. a python-version bump where pip picked a wheel that
 # doesn't actually load). Runs at build time so the gate is the
