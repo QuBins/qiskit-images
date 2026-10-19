@@ -8,7 +8,9 @@
 <!-- Transient redirector — keep it out of the index so it can't compete with the homepage. -->
 <meta name="robots" content="noindex, nofollow">
 <link rel="stylesheet" href="../style.css">
-<script defer src="https://cloud.umami.is/script.js" data-website-id="97f347ac-e7ba-4be3-b26f-ab4b328bdbf2" data-domains="qubins.org"></script>
+<!-- Fun with Quantum family tracker: skips headless browsers and bots; ?notrack turns tracking off in this browser, ?track turns it back on. -->
+<script>(function(){try{var q=location.search;if(/[?&]notrack\b/.test(q))localStorage.setItem('umami.disabled','1');if(/[?&]track\b/.test(q))localStorage.removeItem('umami.disabled')}catch(e){}window.fwqUmamiBeforeSend=function(t,p){var n=navigator;return(n.webdriver||/HeadlessChrome|bot|crawl|spider|Lighthouse|PageSpeed/i.test(n.userAgent))?false:p}})();</script>
+<script defer src="https://cloud.umami.is/script.js" data-website-id="97f347ac-e7ba-4be3-b26f-ab4b328bdbf2" data-domains="qubins.org" data-before-send="fwqUmamiBeforeSend"></script>
 <style>
   /* Tiny override so the launching state takes the full viewport. */
   body { display: flex; flex-direction: column; min-height: 100vh; }
