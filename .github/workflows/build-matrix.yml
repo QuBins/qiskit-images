@@ -805,9 +805,31 @@ jobs:
           # So ask the run itself which arches actually succeeded, and
           # treat "tag exists but wasn't built here" as fatal for this
           # one version rather than publishing a mixed manifest.
-          gh api --paginate \
-            "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/${RUN_ATTEMPT}/jobs?per_page=100" \
-            --jq '.jobs[] | select(.conclusion == "success") | .name' > /tmp/ok-jobs.txt
+          #
+          # The jobs listing can lag right after the build jobs finish:
+          # on 2026-10-19 (run 39278212416) it left out most of the
+          # successful builds at manifest time, every version was
+          # refused as stale, and nothing was published. So an arch
+          # that looks stale is only believed after the listing has
+          # said so several times.
+          list_ok_jobs() {
+            gh api --paginate \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/${RUN_ATTEMPT}/jobs?per_page=100" \
+              --jq '.jobs[] | select(.conclusion == "success") | .name' > /tmp/ok-jobs.txt
+          }
+          looks_stale() {
+            ! grep -Fxq "build ${VERSION} (${1})" /tmp/ok-jobs.txt \
+              && docker buildx imagetools inspect "${REPO}:${VERSION}-${1}" >/dev/null 2>&1
+          }
+          list_ok_jobs
+          for wait in 15 30 45 60; do
+            if ! looks_stale amd64 && ! looks_stale arm64; then
+              break
+            fi
+            echo "An arch looks stale; re-checking the jobs listing in ${wait}s."
+            sleep "${wait}"
+            list_ok_jobs
+          done
 
           sources=()
           stale=()
