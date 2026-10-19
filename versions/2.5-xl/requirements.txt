@@ -47,15 +47,16 @@ qiskit[all]~=2.5.2
 #
 # 0.47 -> 0.49 (QuBins#157): upstream moved its pin after this file
 # first adopted the trio, and the point of the trio is to track them.
-# serverless 0.35.1 allows >=0.47,<0.50 so either works, but 0.49 is
-# also the floor serverless 0.36 will require, so staying on 0.47
-# blocks any future serverless bump. 0.50 is deliberately NOT taken:
-# both serverless 0.35 and 0.36 cap below it, which is what broke
-# doQumentation#958.
-qiskit-ibm-runtime~=0.49.0
+#
+# 0.49 -> 0.50 (QuBins#148): serverless 0.37 (2026-10-15) is the first
+# release that allows runtime 0.50 (>=0.50,<0.51), and catalog 0.21
+# requires serverless ~=0.37. Upstream's nb-tester moved to exactly this
+# set on 2026-10-16. Serverless 0.35 and 0.36 capped runtime below 0.50,
+# which is what broke doQumentation#958 and held 16 docs notebooks back.
+qiskit-ibm-runtime~=0.50.0
 qiskit-aer~=0.17
-qiskit-serverless~=0.35.1
-qiskit-ibm-catalog~=0.19.0
+qiskit-serverless~=0.37.0
+qiskit-ibm-catalog~=0.21.0
 qiskit-addon-sqd~=0.13.1
 qiskit-addon-utils~=0.4.0
 # [tenpy] matches upstream: several notebooks import tenpy through mpf.
