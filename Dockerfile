@@ -8,6 +8,14 @@ FROM quay.io/jupyter/base-notebook:python-3.13@sha256:4ef9cfd552d265799bd9e959a8
 ARG QISKIT_VERSION
 ENV QISKIT_VERSION=${QISKIT_VERSION}
 
+# qiskit-aer bundles its own libgomp, which needs a static TLS slot.
+# From qiskit 2.6 on amd64, qiskit's own extension module leaves too
+# little of glibc's default 512-byte reserve on this base (glibc 2.43),
+# so `import qiskit_aer` fails with "cannot allocate memory in static
+# TLS block". 1024 is enough; 2048 leaves headroom. It is inherited by
+# Jupyter and every kernel, on Binder too.
+ENV GLIBC_TUNABLES=glibc.rtld.optional_static_tls=2048
+
 USER root
 
 # OpenSSL security upgrade, for EVERY flavor.

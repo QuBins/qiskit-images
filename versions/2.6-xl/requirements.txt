@@ -1,0 +1,149 @@
+# Pinned reproducible environment for Qiskit 2.5 (XL flavor).
+# Based on Qiskit-documentation's nb-tester requirements (scripts/nb-tester/
+# requirements.txt) plus pylatexenc, pandas, and nbgitpuller for notebook
+# authoring/distribution.
+#
+# The shared scientific-stack/notebook-tools dependencies (scipy, sklearn,
+# pyscf, plotly, sympy, ffsim, pylatexenc, nbgitpuller, pandas, python-sat,
+# jupyterlab-open-url-parameter) live in ../_xl-base.txt — pip resolves -r
+# paths relative to *this* file, so the shared base is reused across every
+# Qiskit minor's xl flavor.
+#
+# Pins are kept on Qiskit-ecosystem packages (tightly coupled, validated as
+# a set). Scientific-stack packages stay unpinned and resolved by pip.
+#
+# qiskit-ibm-transpiler is intentionally NOT here: in 0.18 it hard-pulls
+# qiskit-gym -> twisterl -> torch + the full CUDA 13 wheelset (~2.5 GB),
+# which is unconditional (not gated by the [ai-local-mode] extra). To
+# keep xl lean it lives only in the xxl flavor (../2.5-xxl). xl users
+# who want it can pip install it on demand.
+#
+# gem-suite is amd64-only: Rust extension, sdist only on aarch64, and
+# the base image has no Rust/C++ toolchain to build from source (also
+# pulls pymatching, sdist-only on aarch64, needing cmake + g++). arm64
+# users who want it can pip install it after adding the toolchain.
+
+-r ../_xl-base.txt
+
+qiskit[all]~=2.6.0
+# The runtime / serverless / catalog trio now tracks upstream's
+# nb-tester set verbatim, because that is what the docs notebooks are
+# actually tested against. Previously xl held runtime at 0.45 so that
+# the xxl flavor -- which chains this file and adds
+# qiskit-ibm-transpiler -- could resolve: transpiler 0.18 requires
+# serverless ~=0.30.
+#
+# That constraint is gone. transpiler 0.18 imports
+# qiskit.synthesis.linear.linear_matrix_utils, which qiskit 2.5
+# removed (it is still present in 2.4), so it cannot work on this
+# minor at all, and 0.18 is the latest release. Upstream reached the
+# same conclusion and has the transpiler line commented out. 2.5-xxl
+# now does too, so nothing chains a conflicting serverless pin and xl
+# is free to follow upstream.
+#
+# Holding runtime at 0.45 cost ~12 of the current docs notebooks,
+# which import Executor, QuantumProgram, NoiseLearner and
+# qiskit_ibm_runtime.circuit -- all added after 0.45 (QuBins#148).
+#
+# 0.47 -> 0.49 (QuBins#157): upstream moved its pin after this file
+# first adopted the trio, and the point of the trio is to track them.
+# serverless 0.35.1 allows >=0.47,<0.50 so either works, but 0.49 is
+# also the floor serverless 0.36 will require, so staying on 0.47
+# blocks any future serverless bump. 0.50 is deliberately NOT taken:
+# both serverless 0.35 and 0.36 cap below it, which is what broke
+# doQumentation#958.
+qiskit-ibm-runtime~=0.50.0
+qiskit-aer~=0.17
+qiskit-serverless~=0.37.0
+qiskit-ibm-catalog~=0.21.0
+qiskit-addon-sqd~=0.13.1
+qiskit-addon-utils~=0.4.0
+# [tenpy] matches upstream: several notebooks import tenpy through mpf.
+# It is x86_64-only here, for the same reason gem-suite is: the extra
+# pulls physics-tenpy, which publishes manylinux wheels for x86_64 but
+# none for aarch64, so pip falls back to the sdist and the build dies on
+#   error: [Errno 2] No such file or directory: 'g++'
+# because the base image ships no C++ toolchain. Adding build-essential
+# to carry one arch would cost far more than the extra is worth.
+# mybinder is amd64-only, so the docs notebooks that need tenpy still
+# get it where they actually run; arm64 keeps mpf without the extra.
+qiskit-addon-mpf[tenpy]~=0.3.0; platform_machine == "x86_64"
+qiskit-addon-mpf~=0.3.0; platform_machine != "x86_64"
+qiskit-addon-aqc-tensor[aer,quimb-jax]~=0.3.1; sys.platform != 'darwin'
+qiskit-addon-obp~=0.3.0
+qiskit-addon-cutting~=0.10.0
+# Upstream pins 0.14.1; 0.14.2 is a patch ahead and stays.
+qiskit-experiments~=0.14.2
+# Pinned to upstream's version; the x86_64 marker stays because
+# gem-suite is sdist-only on aarch64 and the base image has no
+# Rust/C++ toolchain.
+gem-suite~=0.2.0; platform_machine == "x86_64"
+
+# Packages the current Qiskit docs notebooks import that the image
+# otherwise lacks (QuBins#148 group 3). Every one is a genuine
+# dependency of upstream's nb-tester
+# (Qiskit/documentation scripts/nb-tester/requirements.txt), not a
+# notebook-local `%pip install` -- that distinction was checked
+# package by package, because the sweep harness disables the
+# notebooks' own install cells and would otherwise make self-installed
+# packages look missing.
+#
+# openfermion and dotenv are deliberately NOT here: the notebooks that
+# import them are the two cases absent from upstream's list, so they
+# are almost certainly self-installed.
+#
+# Arch safety: all of these are pure-python wheels except mthree and
+# qiskit-paulice, which publish manylinux wheels for both x86_64 and
+# aarch64. None needs a marker. That was verified against PyPI rather
+# than assumed -- the physics-tenpy sdist broke both arm64 builds
+# earlier on this same line of work.
+qiskit-addon-pna~=0.2.0
+qiskit-addon-slc~=0.1.0
+qiskit-addon-opt-mapper~=0.1.0
+qiskit-basis-constructor~=0.1.0
+qiskit-paulice~=0.2.1
+samplomatic~=0.21.0
+qctrl-visualizer~=11.0.0
+category_encoders~=2.11.1
+imbalanced-learn~=0.14.2
+# Surfaced by the first weekly drift report (QuBins#161). qrmi is a
+# Rust extension but ships cp311-abi3 manylinux_2_28 wheels for both
+# x86_64 and aarch64, so it installs on 3.13 without a toolchain;
+# qiskit-mitigation is pure python. Both checked against PyPI for
+# arch, interpreter tag and requires_python before adding.
+qrmi~=0.26.0
+qiskit-mitigation~=0.1.1
+# mthree is upstream's one package we cannot take. It publishes
+# manylinux wheels for both arches but only up to cp312, with no abi3
+# wheel in any release, and this image is Python 3.13 -- so pip falls
+# back to the sdist and the build dies on a missing g++, on BOTH
+# arches. Upstream can pin it because their test environment is on an
+# older Python. Adding a C++ toolchain to every image for one notebook
+# is the wrong trade, so mthree stays out until it ships cp313 or abi3
+# wheels. (qiskit-paulice looks similar at a glance -- its wheels are
+# tagged cp310 -- but they are cp310-abi3, which is forward-compatible,
+# so it installs fine on 3.13.)
+#
+# Not published on PyPI at all; upstream installs it straight from git
+# at a pinned commit, so this stays reproducible. It needs `git` at
+# build time, which the xl/xxl/rise apt layer already provides.
+# Dependabot cannot track a VCS URL, so bumping it is manual.
+qiskit-device-benchmarking @ git+https://github.com/qiskit-community/qiskit-device-benchmarking.git@aff6064fe5079df572b807b1ee5c9e06ea74fa13
+
+# Classic RISE, so the Fun-with-Quantum slideshow games (classic RISE +
+# interactive ipywidgets, launched with ui=rise-classic) run on this
+# image instead of the old 2.1-xl-rise, and mybinder only has to keep
+# this one image warm for them. jupyterlab-rise (in _xl-base.txt) renders
+# ipywidgets >=8 as text (jupyterlab-contrib/rise#119, still open, no
+# release since 2024-12). nbclassic ships in the base image already; the
+# Dockerfile enables autolaunch + its watchdog wherever classic RISE is
+# installed. Only the classic /nbclassic/ frontend is affected, not Lab.
+# Same pins and reasons as versions/2.1-xl-rise/requirements.txt.
+notebook>=7
+rise==5.7.1
+# The games' widgets. 2.1-xl gets ipywidgets transitively (8.1.9, with
+# widgetsnbextension 4.0.16 for the classic frontend and
+# jupyterlab_widgets for Lab); nothing in 2.5-xl pulls it in, so the
+# first widget cell of every game failed with ModuleNotFoundError
+# (FwQ test, 2026-10-13). Same 8.x line as 2.1-xl-rise.
+ipywidgets>=8.1,<9

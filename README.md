@@ -48,7 +48,7 @@ and port options are under [Run on your laptop](#run-on-your-laptop-docker).
 
 The bare `:latest` tag (what Docker pulls when no tag is specified) is
 `latest-small`; the alias `latest` follows the current Qiskit minor
-(today: `2.5`).
+(today: `2.6`).
 
 ## Versions
 

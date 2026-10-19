@@ -53,7 +53,7 @@ env:
   IMAGE: images
   # Qiskit minor that the :latest-<flavor> tags and latest-<flavor> stub
   # branches alias to. Bump when a new minor ships.
-  LATEST_QISKIT: '2.5'
+  LATEST_QISKIT: '2.6'
   # Only runs on main publish to GHCR or update stub branches, manual
   # dispatch included: a dispatch from a feature branch builds for CI
   # signal but stays sandboxed, like a push there. (Before, any dispatch
@@ -100,6 +100,7 @@ jobs:
         run: |
           set -euo pipefail
           ALL=(
+            '2.6-small' '2.6-xl' '2.6-xxl'
             '2.5-small' '2.5-xl' '2.5-xxl'
             '2.4-small' '2.4-xl' '2.4-xxl'
             '2.3-small' '2.3-xl'
