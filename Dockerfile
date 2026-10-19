@@ -107,7 +107,7 @@ RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl || "${QISK
 # a cold rebuild of each on mybinder. A bind mount leaves no files in
 # the image; which inputs matter per image is the epoch step's job
 # (build-matrix.yml).
-# Three post-install repair floors.
+# Post-install repair floors.
 #
 # Base digest 4ef9cfd5 (Ubuntu 26.04.1) is clean for all of these --
 # it ships msgpack 1.2.2, urllib3 2.8.0 and setuptools 84.0.0. The
@@ -123,6 +123,14 @@ RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl || "${QISK
 # 6.5.10, anyio 4.15.1 -- all past their old floors). These three are
 # a different thing and have to stay until the pins that pull them
 # down are tracked to their source.
+#
+# aiohttp is a fourth floor of a different kind: the base itself is
+# behind. It ships conda's aiohttp 3.14.3 (for jupyterhub), and pip
+# leaves an installed package alone unless a requirement needs more,
+# so images whose requirements don't ask for a newer one kept 3.14.3.
+# CVE-2026-111064 / GHSA-2g87-pp6c-29x5 (HIGH, fixed in 3.14.4) then
+# blocked 13 arch builds on 2026-10-19. Drop it once the base ships
+# >= 3.14.4.
 #
 # jupyterlab is deliberately NOT floored here any more. It used to be
 # pinned `>=4.5.10,<4.6` to hold the 4.5 line; the new base ships
@@ -226,7 +234,7 @@ RUN --mount=type=bind,source=versions,target=/tmp/versions \
       return 1; \
     }; \
     pip_retry -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
- && pip_retry --upgrade 'msgpack>=1.2.1' 'urllib3>=2.8.0' 'setuptools>=78.1.1' \
+ && pip_retry --upgrade 'msgpack>=1.2.1' 'urllib3>=2.8.0' 'setuptools>=78.1.1' 'aiohttp>=3.14.4' \
  && pip check \
  && PYTHONHASHSEED=0 python -B /tmp/compile-pyc.py \
  && fix-permissions "${CONDA_DIR}" \
