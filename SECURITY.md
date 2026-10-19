@@ -54,7 +54,7 @@ You don't need to report privately when:
   by raising a version floor, upgrading a system package, or removing
   a file the image doesn't need. Since May 2026 that has happened
   about every eight days.
-- **Suppressions** are rare and listed in [`.trivyignore`](.trivyignore).
+- **Suppressions** are rare and listed in [`.trivyignore.yaml`](.trivyignore.yaml).
   Each one gives the reason, usually that the vulnerable code can't be
   reached or that no installable fix exists yet, and is removed once a
   fix exists. One file is skipped by the scan altogether: Ray's vendored

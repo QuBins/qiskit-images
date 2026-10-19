@@ -10,11 +10,11 @@ on:
       # Dockerfile COPYs in; a change here must rebuild the images.
       - 'docker/**'
       - '.github/workflows/build-matrix.yml'
-      # .trivyignore changes the scan verdict for every image (it gates
+      # .trivyignore.yaml changes the scan verdict for every image (it gates
       # publish), so editing it must re-run the matrix — a new
       # suppression needs to be proven against a real build, and a
       # removed one must re-block.
-      - '.trivyignore'
+      - '.trivyignore.yaml'
   # PRs from any branch (Dependabot's `dependabot/...` branches don't
   # match the push filter above, so without this they'd merge without
   # ever exercising the build + Trivy gate).
@@ -25,7 +25,7 @@ on:
       - 'versions/**'
       - 'docker/**'
       - '.github/workflows/build-matrix.yml'
-      - '.trivyignore'
+      - '.trivyignore.yaml'
   schedule:
     # Daily rebuild + scan + republish at 04:00 UTC (= 05:00 CET, 06:00
     # CEST). Catches upstream base-image CVEs and dependency drift
@@ -172,10 +172,10 @@ jobs:
                 echo "Changed files:"
                 echo "${changed}" | sed 's/^/  /'
                 # Universal-rebuild triggers: Dockerfile, this workflow,
-                # or .trivyignore (a suppression change affects the scan
+                # or .trivyignore.yaml (a suppression change affects the scan
                 # verdict of every image, so all must re-scan).
-                if echo "${changed}" | grep -qE '^(Dockerfile|\.github/workflows/build-matrix\.yml|\.trivyignore)$'; then
-                  versions_json=$(full "Dockerfile, workflow, or .trivyignore changed")
+                if echo "${changed}" | grep -qE '^(Dockerfile|\.github/workflows/build-matrix\.yml|\.trivyignore\.yaml)$'; then
+                  versions_json=$(full "Dockerfile, workflow, or .trivyignore.yaml changed")
                 else
                   # Requirements dependency graph (pip `-r` includes):
                   #   <minor>-xxl  -r  <minor>-xl  -r  _xl-base.txt
@@ -552,8 +552,11 @@ jobs:
             "ghcr.io/aquasecurity/trivy-db:2|ghcr.io/aquasecurity/trivy-java-db:1"; do
             attempt=$((attempt + 1))
             rc=0
+            # --ignorefile: the YAML form, so an entry can carry `paths:`
+            # (plain .trivyignore is per-ID only and image-wide).
             trivy image \
               --timeout 15m \
+              --ignorefile .trivyignore.yaml \
               --skip-files 'opt/conda/lib/python3.13/site-packages/ray/jars/ray_dist.jar' \
               --severity HIGH,CRITICAL \
               --ignore-unfixed \
@@ -567,7 +570,7 @@ jobs:
                 exit 0
                 ;;
               2)
-                echo "::error::Trivy found fixable HIGH/CRITICAL vulnerabilities in ${IMAGE_REF}. Fix or suppress in .trivyignore before this image can publish."
+                echo "::error::Trivy found fixable HIGH/CRITICAL vulnerabilities in ${IMAGE_REF}. Fix or suppress in .trivyignore.yaml before this image can publish."
                 exit 1
                 ;;
               *)
