@@ -159,6 +159,10 @@ RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl || "${QISK
 #      `pip check` at the end proves the two halves add up to one
 #      consistent environment.
 #
+# Both layers end with docker/compile-pyc.py: reproducible, hash-checked
+# bytecode for exactly the files that layer installed, so a fresh Binder
+# pod doesn't compile qiskit & co. on first import (see the script).
+#
 # HEAVY was picked from a 2.5-xl layer listing (jaxlib alone is 350 MB,
 # the list below is ~80% of the bytes) plus the xxl GPU stack. The
 # Qiskit packages themselves stay in layer 2 on purpose: they are what
@@ -173,6 +177,7 @@ RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl || "${QISK
 # changed upstream, both layers come out byte-identical.
 ARG PIP_RESOLVE_DATE
 RUN --mount=type=bind,source=versions,target=/tmp/versions \
+    --mount=type=bind,source=docker/compile-pyc.py,target=/tmp/compile-pyc.py \
     pip_retry() { \
       local attempt; \
       for attempt in 1 2 3; do \
@@ -201,11 +206,13 @@ print(f"heavy layer: {len(pick)} of {len(pins)} packages")' \
       pip_retry install --no-cache-dir --no-compile --no-deps -r /tmp/heavy.txt; \
     fi \
  && rm -f /tmp/resolve.json /tmp/heavy.txt \
+ && PYTHONHASHSEED=0 python -B /tmp/compile-pyc.py \
  && fix-permissions "${CONDA_DIR}"
 
 # Layer 2: the rest, then the floors (see above for both and for the
 # retry wrapper, repeated here because each RUN is its own shell).
 RUN --mount=type=bind,source=versions,target=/tmp/versions \
+    --mount=type=bind,source=docker/compile-pyc.py,target=/tmp/compile-pyc.py \
     pip_retry() { \
       local attempt; \
       for attempt in 1 2 3; do \
@@ -221,6 +228,7 @@ RUN --mount=type=bind,source=versions,target=/tmp/versions \
     pip_retry -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
  && pip_retry --upgrade 'msgpack>=1.2.1' 'urllib3>=2.8.0' 'setuptools>=78.1.1' \
  && pip check \
+ && PYTHONHASHSEED=0 python -B /tmp/compile-pyc.py \
  && fix-permissions "${CONDA_DIR}" \
  && fix-permissions "/home/${NB_USER}"
 
