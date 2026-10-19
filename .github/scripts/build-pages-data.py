@@ -42,7 +42,9 @@ One entry per published image:
       "snapshots": [                          # newest first; may be []
         {"tag": "2.4-small-20261008", "date": "2026-10-08",
          "digest": "sha256:..."}
-      ]
+      ],
+      "packages": {"url": "packages/2.4-small.json",   # see write_packages
+                   "changed_at": "...", "changes": 3}  # last two optional
     }
 
 LATEST_QISKIT is read from build-matrix.yml's env block so we don't
@@ -58,8 +60,11 @@ image's record so the page still renders.
 """
 from __future__ import annotations
 
+import gzip
 import hashlib
+import io
 import json
+import tarfile
 import re
 import sys
 import time
@@ -380,6 +385,110 @@ def fetch_image_meta(tag: str) -> dict:
     return out
 
 
+# --------------------------------------------------------- package lists
+# Each image's last layer holds /opt/qubins/packages.json (see the
+# Dockerfile's final step). Publish it as docs/packages/<tag>.json with
+# a history of what changed between digests, so "what changed tonight?"
+# has an answer. The history is carried over from the previously
+# deployed file on qubins.org, since nothing else stores it.
+PACKAGES_PATH = "opt/qubins/packages.json"
+PACKAGES_LAYER_MAX = 1024 * 1024   # the layer is ~4 KB; never pull a big one
+PACKAGES_HISTORY = 30              # changes kept per tag
+LIVE_BASE = "https://qubins.org"
+
+
+def _layer_packages(manifest: dict | None) -> dict | None:
+    """packages.json from a platform manifest's last layer, or None
+    (image built before the step existed, or a registry blip)."""
+    layers = (manifest or {}).get("layers") or []
+    if not layers or (layers[-1].get("size") or 0) > PACKAGES_LAYER_MAX:
+        return None
+    blob = _ghcr_get(f"blobs/{layers[-1]['digest']}", "*/*", raw=True)
+    if not blob:
+        return None
+    try:
+        data = gzip.decompress(blob) if blob[:2] == b"\x1f\x8b" else blob
+        with tarfile.open(fileobj=io.BytesIO(data)) as tar:
+            member = tar.extractfile(PACKAGES_PATH)
+            return json.loads(member.read()) if member else None
+    except (KeyError, OSError, ValueError, tarfile.TarError):
+        return None
+
+
+def fetch_packages(tag: str) -> dict | None:
+    """{digest, amd64: {python, apt}, arm64: {...}} for a tag, or None."""
+    idx = _index(tag)
+    if not idx:
+        return None
+    index, index_digest = idx
+    out: dict = {"digest": index_digest}
+    for m in index["manifests"]:
+        arch = (m.get("platform") or {}).get("architecture")
+        if arch in ("amd64", "arm64") and arch not in out:
+            pk = _layer_packages(_ghcr_get(f"manifests/{m['digest']}", MANIFEST_ACCEPT))
+            if pk:
+                out[arch] = {"python": pk.get("python") or {}, "apt": pk.get("apt") or {}}
+    return out if "amd64" in out else None
+
+
+def _live_packages(tag: str) -> dict | None:
+    """The currently deployed docs/packages/<tag>.json, or None."""
+    try:
+        with _OPENER.open(f"{LIVE_BASE}/packages/{tag}.json", timeout=15) as r:
+            return json.loads(r.read())
+    except Exception:  # noqa: BLE001 — first deploy, offline, 404
+        return None
+
+
+def package_changes(old: dict, new: dict) -> list[dict]:
+    """[{kind, name, from, to}] between two {python, apt} dicts;
+    from/to is null for an added/removed package."""
+    changes = []
+    for kind in ("python", "apt"):
+        a, b = old.get(kind) or {}, new.get(kind) or {}
+        for name in sorted(set(a) | set(b)):
+            if a.get(name) != b.get(name):
+                changes.append({"kind": kind, "name": name,
+                                "from": a.get(name), "to": b.get(name)})
+    return changes
+
+
+def write_packages(tag: str, item: dict, current: dict) -> dict:
+    """Writes docs/packages/<tag>.json; returns the summary that goes
+    into versions.json ({url, changed_at?, changes?})."""
+    prev = _live_packages(tag) or {}
+    history = list(prev.get("history") or [])
+    if prev.get("digest") and prev.get("digest") != current["digest"] and prev.get("amd64"):
+        changes = package_changes(prev["amd64"], current["amd64"])
+        if changes:
+            history.insert(0, {
+                "date": item.get("updated_at") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "digest": current["digest"],
+                "previous_digest": prev["digest"],
+                "qiskit_patch": item.get("qiskit_patch"),
+                "changes": changes,
+            })
+    payload = {
+        "schema_version": 1,
+        "tag": tag,
+        "digest": current["digest"],
+        "updated_at": item.get("updated_at"),
+        "qiskit_patch": item.get("qiskit_patch"),
+        "amd64": current["amd64"],
+        "history": history[:PACKAGES_HISTORY],
+    }
+    if current.get("arm64"):
+        payload["arm64"] = current["arm64"]
+    target = REPO_ROOT / "docs" / "packages" / f"{tag}.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(payload, indent=1) + "\n")
+    summary = {"url": f"packages/{tag}.json"}
+    if payload["history"]:
+        summary["changed_at"] = payload["history"][0]["date"]
+        summary["changes"] = len(payload["history"][0]["changes"])
+    return summary
+
+
 def main() -> None:
     latest = latest_qiskit()
     entries = discover_versions()
@@ -417,6 +526,9 @@ def main() -> None:
         snaps = fetch_snapshots(tag)
         if snaps is not None:
             item["snapshots"] = snaps
+        pk = fetch_packages(tag)
+        if pk:
+            item["packages"] = write_packages(tag, item, pk)
         out.append(item)
 
     payload = {

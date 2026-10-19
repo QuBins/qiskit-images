@@ -297,5 +297,17 @@ RUN if python3 -B -c 'import importlib.metadata as m; m.version("rise")' 2>/dev/
 # source mtimes, so the layer would differ on every rebuild).
 RUN python -B -c 'import qiskit; from qiskit import QuantumCircuit; QuantumCircuit(2).measure_all()'
 
+# Package list (bill of materials): every Python distribution and apt
+# package with its version, as /opt/qubins/packages.json. It must stay
+# the LAST layer-creating step: the Pages build reads only the image's
+# last (few-KB) layer from the registry to publish qubins.org/packages/
+# and the "what changed" history. Sorted, no timestamps, so the layer
+# is reproducible and only changes when a version does.
+RUN mkdir -p /opt/qubins \
+ && dpkg-query -W -f='${Package}\t${Version}\n' > /tmp/apt.tsv \
+ && python -B -c 'import json, re, importlib.metadata as m; norm = lambda n: re.sub(r"[-_.]+", "-", n).lower(); py = {norm(d.metadata["Name"]): d.version for d in m.distributions() if d.metadata["Name"]}; apt = dict(l.rstrip("\n").split("\t", 1) for l in open("/tmp/apt.tsv") if "\t" in l); json.dump({"schema_version": 1, "python": dict(sorted(py.items())), "apt": dict(sorted(apt.items()))}, open("/opt/qubins/packages.json", "w"), indent=0, sort_keys=False); open("/opt/qubins/packages.json", "a").write("\n")' \
+ && rm -f /tmp/apt.tsv \
+ && chmod 644 /opt/qubins/packages.json
+
 USER ${NB_UID}
 WORKDIR /home/${NB_USER}

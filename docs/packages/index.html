@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Packages — QuBins</title>
+<meta name="description" content="Every Python and apt package in a QuBins image, and what changed between nightly builds.">
+<link rel="stylesheet" href="../style.css">
+<!-- Fun with Quantum family tracker: skips headless browsers and bots; ?notrack turns tracking off in this browser, ?track turns it back on. -->
+<script>(function(){try{var q=location.search;if(/[?&]notrack\b/.test(q))localStorage.setItem('umami.disabled','1');if(/[?&]track\b/.test(q))localStorage.removeItem('umami.disabled')}catch(e){}window.fwqUmamiBeforeSend=function(t,p){var n=navigator;return(n.webdriver||/HeadlessChrome|bot|crawl|spider|Lighthouse|PageSpeed/i.test(n.userAgent))?false:p}})();</script>
+<script defer src="https://cloud.umami.is/script.js" data-website-id="97f347ac-e7ba-4be3-b26f-ab4b328bdbf2" data-domains="qubins.org" data-before-send="fwqUmamiBeforeSend"></script>
+<style>
+  .pk-controls { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin: 1rem 0; }
+  .pk-controls select, .pk-controls input { font: inherit; padding: 0.3rem 0.5rem; }
+  .pk-controls input { flex: 1 1 12rem; min-width: 0; }
+  .pk-table { width: 100%; border-collapse: collapse; font-size: 0.92em; }
+  .pk-table th, .pk-table td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+  .pk-table td:last-child, .pk-table th:last-child { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .pk-change { margin: 0.75rem 0 1.25rem; }
+  .pk-change h3 { font-size: 1em; margin: 0 0 0.3rem; }
+  .pk-change ul { margin: 0; padding-left: 1.2rem; }
+  .pk-change code { overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="../" style="color: inherit; text-decoration: none;">QuBins</a></h1>
+  <p class="lede">What&rsquo;s in each image, and what changed between nightly builds.</p>
+</header>
+<main>
+  <section>
+    <div class="pk-controls">
+      <label>Image <select id="pk-tag"></select></label>
+      <label>Architecture <select id="pk-arch"><option value="amd64">amd64</option><option value="arm64">arm64</option></select></label>
+    </div>
+    <p id="pk-meta" class="notes"></p>
+  </section>
+  <section>
+    <h2>Recent changes</h2>
+    <div id="pk-history"><p class="notes">Loading&hellip;</p></div>
+  </section>
+  <section>
+    <h2>All packages</h2>
+    <div class="pk-controls">
+      <input id="pk-filter" type="search" placeholder="Filter, e.g. qiskit" aria-label="Filter packages">
+    </div>
+    <table class="pk-table">
+      <thead><tr><th>Package</th><th>Source</th><th>Version</th></tr></thead>
+      <tbody id="pk-list"></tbody>
+    </table>
+    <p class="notes">The same list ships inside every image at <code>/opt/qubins/packages.json</code>. Machine-readable per tag at <code>https://qubins.org/packages/&lt;tag&gt;.json</code> (see the README, &ldquo;Package lists&rdquo;).</p>
+  </section>
+</main>
+<footer>
+  <p><a href="../">&larr; Back to QuBins</a></p>
+</footer>
+<script src="packages.js"></script>
+</body>
+</html>
