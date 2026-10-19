@@ -266,18 +266,18 @@ few days later. **Don't pin a nightly digest**: it will stop pulling.
 
 Instead, pin a **monthly snapshot**. The first nightly of each month
 also publishes `<version>-YYYYMMDD`, dated by the day that nightly ran
-(for example `2.5-xl-20261101`; the first set, made when snapshots
-started, is `-20261008`).
+(the first set, made when snapshots started, is `-20261008`, so the
+date is not always the 1st).
 That tag is never moved and is kept for 12 months, so the tag and its
 digest both stay pullable for a year:
 
 ```sh
-docker pull ghcr.io/qubins/images:2.5-xl-20261101
+docker pull ghcr.io/qubins/images:2.5-xl-20261008
 ```
 
 Snapshots launch on Binder too, so a course can pin the exact
 environment its notebooks were tested against:
-`https://qubins.org/launch/?image=2.5-xl-20261101` (add `repo=`,
+`https://qubins.org/launch/?image=2.5-xl-20261008` (add `repo=`,
 `path=` or `file=` as for any other tag). Each snapshot has an
 immutable git tag of the same name as its Binder stub, `FROM` the
 snapshot's digest. Because that commit never changes, mybinder builds
