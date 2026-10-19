@@ -70,6 +70,35 @@ jobs:
        github.event.workflow_run.head_branch == 'main')
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history: the sitemap's <lastmod> dates come from the
+          # last commit that touched each page (step below).
+          fetch-depth: 0
+
+      - name: Sitemap lastmod from git
+        # Each page's <lastmod> is the date of the last commit to its
+        # files, so it is real rather than hand-set, and the IndexNow
+        # job only announces pages that actually changed.
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, subprocess
+          PAGES = {  # <loc> path -> files that make up the page
+              "/": ["docs/index.html", "docs/app.js", "docs/style.css"],
+              "/packages/": ["docs/packages/"],
+          }
+          def last(paths):
+              return subprocess.run(["git", "log", "-1", "--format=%cs", "--", *paths],
+                                    capture_output=True, text=True, check=True).stdout.strip()
+          p = "docs/sitemap.xml"
+          s = open(p).read()
+          for path, files in PAGES.items():
+              date = last(files)
+              loc = re.escape(f"https://qubins.org{path}")
+              s, n = re.subn(rf"(<loc>{loc}</loc>\s*<lastmod>)[^<]*(</lastmod>)", rf"\g<1>{date}\g<2>", s)
+              print(f"{path}: lastmod {date}" if n else f"::warning::{path} not in sitemap.xml")
+          open(p, "w").write(s)
+          PY
 
       - name: Build versions.json
         run: python3 .github/scripts/build-pages-data.py
@@ -147,3 +176,16 @@ jobs:
     steps:
       - id: deploy
         uses: actions/deploy-pages@v5
+
+  # Tell Bing, Yandex & co. which pages changed (the Fun with Quantum
+  # family's shared IndexNow workflow). It sends the sitemap pages whose
+  # <lastmod> is from today or yesterday (UTC), so nightly redeploys
+  # without page changes send nothing. The key is public by design and
+  # served at https://qubins.org/2af01ee6d6c04ed6bc71041084db9aac.txt.
+  indexnow:
+    needs: deploy
+    if: github.ref == 'refs/heads/main'
+    uses: JanLahmann/Fun-with-Quantum/.github/workflows/indexnow.yml@master
+    with:
+      site: https://qubins.org
+      key: 2af01ee6d6c04ed6bc71041084db9aac
