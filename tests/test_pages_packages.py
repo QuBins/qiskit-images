@@ -55,6 +55,15 @@ class LayerPackages(unittest.TestCase):
         blob = _layer({"opt/": b"", "opt/qubins/packages.json": json.dumps(PK).encode()})
         self.assertEqual(self.m._layer_packages(self.manifest(blob)), PK)
 
+    def test_finds_it_before_a_trailing_empty_layer(self):
+        # Real 2.6-xl tail: ..., packages layer, 32-byte empty layer.
+        self.blobs["blobs/sha256:pk"] = _layer({"opt/qubins/packages.json": json.dumps(PK).encode()})
+        self.blobs["blobs/sha256:empty"] = _layer({})
+        manifest = {"layers": [{"digest": "sha256:big", "size": 500_000_000},
+                               {"digest": "sha256:pk", "size": 4676},
+                               {"digest": "sha256:empty", "size": 32}]}
+        self.assertEqual(self.m._layer_packages(manifest), PK)
+
     def test_old_image_without_the_file(self):
         self.assertIsNone(self.m._layer_packages(self.manifest(_layer({"tmp/x": b"1"}))))
 
