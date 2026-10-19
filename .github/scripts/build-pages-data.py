@@ -386,33 +386,39 @@ def fetch_image_meta(tag: str) -> dict:
 
 
 # --------------------------------------------------------- package lists
-# Each image's last layer holds /opt/qubins/packages.json (see the
+# One of each image's last layers holds /opt/qubins/packages.json (see the
 # Dockerfile's final step). Publish it as docs/packages/<tag>.json with
 # a history of what changed between digests, so "what changed tonight?"
 # has an answer. The history is carried over from the previously
 # deployed file on qubins.org, since nothing else stores it.
 PACKAGES_PATH = "opt/qubins/packages.json"
-PACKAGES_LAYER_MAX = 1024 * 1024   # the layer is ~4 KB; never pull a big one
+PACKAGES_LAYER_MAX = 1024 * 1024   # the layer is ~5 KB; never pull a big one
+PACKAGES_LAYERS_SCANNED = 4        # how far from the end to look
 PACKAGES_HISTORY = 30              # changes kept per tag
 LIVE_BASE = "https://qubins.org"
 
 
 def _layer_packages(manifest: dict | None) -> dict | None:
-    """packages.json from a platform manifest's last layer, or None
-    (image built before the step existed, or a registry blip)."""
+    """packages.json from one of a platform manifest's last few small
+    layers, or None (image built before the step existed, or a
+    registry blip). Not only the very last layer: BuildKit can append
+    an empty (32-byte) layer after it, e.g. for WORKDIR."""
     layers = (manifest or {}).get("layers") or []
-    if not layers or (layers[-1].get("size") or 0) > PACKAGES_LAYER_MAX:
-        return None
-    blob = _ghcr_get(f"blobs/{layers[-1]['digest']}", "*/*", raw=True)
-    if not blob:
-        return None
-    try:
-        data = gzip.decompress(blob) if blob[:2] == b"\x1f\x8b" else blob
-        with tarfile.open(fileobj=io.BytesIO(data)) as tar:
-            member = tar.extractfile(PACKAGES_PATH)
-            return json.loads(member.read()) if member else None
-    except (KeyError, OSError, ValueError, tarfile.TarError):
-        return None
+    for layer in reversed(layers[-PACKAGES_LAYERS_SCANNED:]):
+        if (layer.get("size") or 0) > PACKAGES_LAYER_MAX:
+            break  # a big layer means we're past the tail of small ones
+        blob = _ghcr_get(f"blobs/{layer['digest']}", "*/*", raw=True)
+        if not blob:
+            continue
+        try:
+            data = gzip.decompress(blob) if blob[:2] == b"\x1f\x8b" else blob
+            with tarfile.open(fileobj=io.BytesIO(data)) as tar:
+                member = tar.extractfile(PACKAGES_PATH)
+                if member:
+                    return json.loads(member.read())
+        except (KeyError, OSError, ValueError, tarfile.TarError):
+            continue
+    return None
 
 
 def fetch_packages(tag: str) -> dict | None:
