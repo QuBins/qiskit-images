@@ -1,6 +1,6 @@
 :root {
   --fg: #1f2328;
-  --fg-muted: #6e7681;
+  --fg-muted: #59636e;
   --bg: #ffffff;
   --bg-soft: #f6f8fa;
   --border: #d0d7de;
@@ -8,7 +8,8 @@
   --accent-fg: #ffffff;
   --code-bg: #f6f8fa;
   --code-fg: #1f2328;
-  --tag-latest: #2da44e;
+  --tag-latest: #1a7f37;
+  --tag-latest-fg: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,6 +24,7 @@
     --code-bg: #161b22;
     --code-fg: #e6edf3;
     --tag-latest: #3fb950;
+    --tag-latest-fg: #0d1117;
   }
 }
 
@@ -476,7 +478,7 @@ th {
   border-radius: 999px;
   font-size: 0.8em;
   background: var(--tag-latest);
-  color: white;
+  color: var(--tag-latest-fg);
   margin-left: 0.4em;
   vertical-align: middle;
 }
@@ -654,7 +656,7 @@ footer .security-note {
 
 /* Family footer block, rendered from family.json in JanLahmann/Fun-with-Quantum
    (between FWQ-FAMILY markers in index.html — regenerated, never hand-edited). */
-.family-footer { margin: 1.5rem 0 0; }
+.family-footer { margin: 0 auto; }
 .family-footer > div { margin: 0.4rem 0; }
 .family-footer-tagline { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8em; letter-spacing: 0.08em; }
 .family-footer-members { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.6rem 1.25rem; }
