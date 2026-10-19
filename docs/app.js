@@ -179,6 +179,21 @@
         }
         flavorCell.appendChild(sub);
       }
+      // Package list + "what changed" page (README: "Package lists").
+      if (img.packages && img.packages.url) {
+        const sub = document.createElement("div");
+        sub.className = "row-sub";
+        const a = document.createElement("a");
+        a.href = `${PAGES}/packages/?tag=${encodeURIComponent(img.binder_tag)}`;
+        a.textContent = "packages";
+        if (img.packages.changed_at) {
+          a.title = `${img.packages.changes} changed ${formatDate(img.packages.changed_at)}`;
+        }
+        a.addEventListener("click", () =>
+          track("QuBins: catalog packages click", { tag: img.binder_tag }));
+        sub.appendChild(a);
+        flavorCell.appendChild(sub);
+      }
       tr.appendChild(flavorCell);
 
       // QuBins-branded launch badge → /launch/?... redirector,

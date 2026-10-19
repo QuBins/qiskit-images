@@ -334,7 +334,12 @@ redirector read it, so it is treated as an interface:
       "snapshots": [                   // newest first; [] before the first one
         { "tag": "2.5-xl-20261008", "date": "2026-10-08",
           "digest": "sha256:dd8f4f72…" }
-      ]
+      ],
+      "packages": {                    // package list of tonight's image
+        "url": "packages/2.5-xl.json",
+        "changed_at": "2026-10-20T04:12:31Z",  // last version change, if any
+        "changes": 3                   // packages changed then
+      }
     }
   ]
 }
@@ -346,6 +351,31 @@ later. Different flavors of one minor can ship different
 `qiskit_ibm_runtime` versions (2.5-small takes the newest; 2.5-xl is
 held back by `qiskit-serverless`), so check that field if your
 notebooks depend on a runtime API.
+
+### Package lists (what's in an image, what changed)
+
+Every image carries its full package list, Python and apt, with
+versions, at `/opt/qubins/packages.json`. The site publishes it per tag
+at `https://qubins.org/packages/<tag>.json` and shows it at
+[qubins.org/packages/](https://qubins.org/packages/?tag=2.5-xl):
+
+```jsonc
+{
+  "schema_version": 1,
+  "tag": "2.5-xl",
+  "digest": "sha256:…",              // the image the lists below describe
+  "amd64": { "python": { "qiskit": "2.5.2", … }, "apt": { … } },
+  "arm64": { … },                    // differs where wheels are amd64-only
+  "history": [                       // newest first, last 30 changes
+    { "date": "…", "digest": "sha256:…", "previous_digest": "sha256:…",
+      "changes": [ { "kind": "python", "name": "wrapt",
+                     "from": "2.5.0", "to": "2.5.1" } ] }
+  ]
+}
+```
+
+`from` is `null` for an added package and `to` is `null` for a removed
+one. History starts with the first nightly after this feature shipped.
 
 ## Pull your own notebook repo (nbgitpuller)
 
