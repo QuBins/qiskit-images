@@ -103,8 +103,8 @@ class CompareTests(unittest.TestCase):
         self.assertEqual(r["missing"], [("qrmi", "~=0.25.1")])
 
     def test_documented_exceptions_are_skipped_both_ways(self):
-        ours = {"mthree": "~=1.0", "qiskit-experiments": "~=0.14.2"}
-        theirs = {"mthree": "~=3.0.0", "qiskit-experiments": "~=0.14.1"}
+        ours = {"qiskit-ibm-transpiler": "~=0.15.0", "qiskit-experiments": "~=0.14.2"}
+        theirs = {"qiskit-ibm-transpiler": "~=0.18.0", "qiskit-experiments": "~=0.14.1"}
         r = self.m.compare(ours, theirs)
         self.assertEqual(r["differing"], [])
         self.assertEqual(r["extra"], [])

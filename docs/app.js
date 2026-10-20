@@ -98,7 +98,7 @@
   }
 
   // "903 MB", or "903 MB (arm64 844 MB)" when the arches differ by more
-  // than 5 % (gem-suite and the AI transpiler have no arm64 wheels).
+  // than 5 % (gem-suite on 2.0–2.4 and the AI transpiler have no arm64 wheels).
   function sizeText(img) {
     const a = img.size_mb, b = img.size_mb_arm64;
     if (typeof b !== "number" || Math.abs(a - b) <= 0.05 * a) return formatSize(a);

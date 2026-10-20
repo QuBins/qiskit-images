@@ -1,3 +1,35 @@
+# Source-built wheels (docker/build-wheels.txt): mthree has no Python
+# 3.13 wheel at all, and physics-tenpy, pymatching and gem-suite have none
+# for aarch64. This stage builds them with a conda-forge toolchain; the
+# final stage only installs the wheels, so no compiler ships in an image.
+# Only the images on the list's `images:` line build anything; every
+# other image gets an empty /wheels in a second. The stage depends on
+# nothing but the base, QISKIT_VERSION and that one file -- not on the
+# daily PIP_RESOLVE_DATE -- so the layer cache keeps it and the ~5 min
+# arm64 build only reruns when a pin or the base changes.
+# pymatching's CMake build looks for a plain `ar`, hence the symlink, and
+# fetches googletest with git, hence git in the toolchain.
+# Same base digest as below; Dependabot bumps both FROM lines together.
+FROM quay.io/jupyter/base-notebook:python-3.13@sha256:4ef9cfd552d265799bd9e959a87fb674da8cea738145ce49e7d286cb967ad1d7 AS wheels
+ARG QISKIT_VERSION
+USER root
+RUN --mount=type=bind,source=docker/build-wheels.txt,target=/tmp/build-wheels.txt \
+    mkdir -p /wheels && : > /wheels/constraints.txt \
+ && if ! grep -qE "^# images:(.* )?${QISKIT_VERSION}( |$)" /tmp/build-wheels.txt; then \
+      echo "No source-built wheels for ${QISKIT_VERSION}."; exit 0; \
+    fi \
+ && mamba create -q -y -p /opt/tc -c conda-forge --override-channels \
+      c-compiler cxx-compiler rust cmake make git \
+ && export PATH="/opt/tc/bin:${PATH}" \
+ && export CC="$(ls /opt/tc/bin/*-conda-linux-gnu-gcc)" CXX="$(ls /opt/tc/bin/*-conda-linux-gnu-g++)" \
+ && ln -sf "$(ls /opt/tc/bin/*-conda-linux-gnu-ar)" /usr/local/bin/ar \
+ && pip wheel --no-cache-dir --no-deps -w /wheels -r /tmp/build-wheels.txt \
+ && python -B -c 'import pathlib, re; \
+ws = sorted(pathlib.Path("/wheels").glob("*.whl")); \
+pins = [re.sub(r"_", "-", w.name.split("-")[0]).lower() + "==" + w.name.split("-")[1] for w in ws]; \
+pathlib.Path("/wheels/constraints.txt").write_text("".join(p + "\n" for p in pins)); \
+print("source-built:", ", ".join(pins) or "none")'
+
 # Pin to a digest so a re-tagged base can't silently change the
 # build under us; Dependabot proposes digest bumps weekly and they
 # go through the full Trivy + smoke gate like any other change.
@@ -186,6 +218,7 @@ RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl || "${QISK
 ARG PIP_RESOLVE_DATE
 RUN --mount=type=bind,source=versions,target=/tmp/versions \
     --mount=type=bind,source=docker/compile-pyc.py,target=/tmp/compile-pyc.py \
+    --mount=type=bind,from=wheels,source=/wheels,target=/tmp/wheels \
     pip_retry() { \
       local attempt; \
       for attempt in 1 2 3; do \
@@ -200,6 +233,7 @@ RUN --mount=type=bind,source=versions,target=/tmp/versions \
     }; \
     echo "Resolving for ${QISKIT_VERSION} (resolve date ${PIP_RESOLVE_DATE:-unset})" \
  && pip_retry install --no-cache-dir --dry-run --quiet --report /tmp/resolve.json \
+      --find-links /tmp/wheels -c /tmp/wheels/constraints.txt \
       -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
  && HEAVY='numpy scipy pandas scikit-learn matplotlib fonttools pillow contourpy kiwisolver sympy symengine jax jaxlib ml-dtypes opt-einsum llvmlite numba pyscf h5py z3-solver cytoolz plotly networkx rustworkx cvxpy scs clarabel osqp highspy qdldl ecos pyarrow ray torch triton nvidia-*' \
     python3 -B -c 'import json, os, re; \
@@ -221,6 +255,7 @@ print(f"heavy layer: {len(pick)} of {len(pins)} packages")' \
 # retry wrapper, repeated here because each RUN is its own shell).
 RUN --mount=type=bind,source=versions,target=/tmp/versions \
     --mount=type=bind,source=docker/compile-pyc.py,target=/tmp/compile-pyc.py \
+    --mount=type=bind,from=wheels,source=/wheels,target=/tmp/wheels \
     pip_retry() { \
       local attempt; \
       for attempt in 1 2 3; do \
@@ -233,7 +268,8 @@ RUN --mount=type=bind,source=versions,target=/tmp/versions \
       echo "pip failed after 3 attempts" >&2; \
       return 1; \
     }; \
-    pip_retry -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
+    pip_retry --find-links /tmp/wheels -c /tmp/wheels/constraints.txt \
+      -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
  && pip_retry --upgrade 'msgpack>=1.2.1' 'urllib3>=2.8.0' 'setuptools>=78.1.1' 'aiohttp>=3.14.4' \
  && pip check \
  && PYTHONHASHSEED=0 python -B /tmp/compile-pyc.py \
@@ -326,7 +362,18 @@ RUN site="$(python -B -c 'import sysconfig; print(sysconfig.get_paths()["purelib
 # doesn't actually load). Runs at build time so the gate is the
 # build itself. -B: don't leave .pyc files in this layer (they embed
 # source mtimes, so the layer would differ on every rebuild).
-RUN python -B -c 'import qiskit; from qiskit import QuantumCircuit; QuantumCircuit(2).measure_all()'
+# The source-built packages (wheels stage) are imported too wherever they
+# are installed: they link against the toolchain's C++ runtime, and this
+# is where a mismatch with the image's libstdc++ would show. A throwaway
+# HOME keeps import-time caches (matplotlib, qiskit config) out of the layer.
+RUN python -B -c 'import qiskit; from qiskit import QuantumCircuit; QuantumCircuit(2).measure_all()' \
+ && mkdir -p /tmp/smoke-home \
+ && HOME=/tmp/smoke-home MPLCONFIGDIR=/tmp/smoke-home python -B -c 'import importlib, re, importlib.metadata as m; \
+mods = {"mthree": "mthree", "physics-tenpy": "tenpy", "pymatching": "pymatching", "gem-suite": "gem_suite"}; \
+names = {re.sub(r"[-_.]+", "-", d.metadata["Name"]).lower() for d in m.distributions()}; \
+done = [importlib.import_module(mod).__name__ for dist, mod in mods.items() if dist in names]; \
+print("source-built imports ok:", ", ".join(done) or "none")' \
+ && rm -rf /tmp/smoke-home
 
 # Package list (bill of materials): every Python distribution and apt
 # package with its version, as /opt/qubins/packages.json. It must stay

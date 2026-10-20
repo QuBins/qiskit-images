@@ -1,0 +1,19 @@
+# Packages built from source in the Dockerfile's `wheels` stage, for the
+# images listed on the `images:` line only. PyPI has no wheel for them on
+# Python 3.13 for the marked arch, and the image ships no compilers, so the
+# stage builds them with a throwaway conda-forge toolchain and the final
+# stage installs the finished wheels (the toolchain never reaches an image).
+#
+# Exact pins: the stage also writes them as a pip constraints file for the
+# final stage, so a requirements bump past a pin fails the build loudly
+# rather than falling back to an sdist. Bump here and in the requirements
+# together.
+#
+# images: 2.5-xl 2.5-xxl 2.6-xl 2.6-xxl
+
+# Only cp39-cp312 wheels, no abi3: built on both arches.
+mthree==3.0.0
+# x86_64 has manylinux wheels on PyPI; aarch64 has only sdists.
+physics-tenpy==1.1.1; platform_machine == "aarch64"
+pymatching==2.4.0; platform_machine == "aarch64"
+gem-suite==0.2.0; platform_machine == "aarch64"

@@ -46,10 +46,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # says WHY, because an unexplained exception here silently becomes a
 # place drift can hide.
 EXCEPTIONS: dict[str, str] = {
-    # Only cp39-cp312 wheels and no abi3 wheel in any release; the
-    # image is Python 3.13, so pip falls back to an sdist that needs a
-    # C++ toolchain the image does not carry. Tracked in QuBins#157.
-    "mthree": "no cp313/abi3 wheel; would build from sdist and fail",
     # 0.18 imports qiskit.synthesis.linear.linear_matrix_utils, removed
     # in qiskit 2.5, and requires serverless ~=0.30 which conflicts
     # with the trio. Upstream has it commented out for the same reason.
@@ -65,8 +61,9 @@ EXCEPTIONS: dict[str, str] = {
 # Absent-but-expected is not drift.
 NOT_SHIPPED: dict[str, str] = {}
 
-# Packages this image ships that upstream does not. All are notebook
-# authoring/distribution tooling or a security floor, documented in
+# Packages this image ships that upstream does not: notebook
+# authoring/distribution tooling, a security floor, or a package docs
+# notebooks import that upstream's list lacks, documented in
 # versions/_xl-base.txt and versions/<minor>-xl/requirements.txt.
 # Permanent, so reporting them weekly would be pure noise.
 OURS_ONLY: dict[str, str] = {
@@ -76,6 +73,8 @@ OURS_ONLY: dict[str, str] = {
     "jupyterlab-rise": "the -rise flavor's slideshow UI",
     "jupyterlab-open-url-parameter": "launch-by-URL support",
     "aiohttp": "security floor (CVE-2026-69244), not an upstream pin",
+    "qiskit-fermions": "imported by current docs notebooks, not in upstream's list",
+    "moocore": "imported by current docs notebooks, not in upstream's list",
 }
 
 
