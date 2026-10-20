@@ -104,7 +104,7 @@ imbalanced-learn~=0.14.2
 # x86_64 and aarch64, so it installs on 3.13 without a toolchain;
 # qiskit-mitigation is pure python. Both checked against PyPI for
 # arch, interpreter tag and requires_python before adding.
-qrmi~=0.26.0
+qrmi~=0.26.3
 qiskit-mitigation~=0.1.1
 # Not in upstream's nb-tester list, but imported by current docs
 # notebooks (doQumentation sweep, 2026-10-19). Both publish wheels for
