@@ -18,10 +18,11 @@
 # keep xl lean it lives only in the xxl flavor (../2.5-xxl). xl users
 # who want it can pip install it on demand.
 #
-# gem-suite is amd64-only: Rust extension, sdist only on aarch64, and
-# the base image has no Rust/C++ toolchain to build from source (also
-# pulls pymatching, sdist-only on aarch64, needing cmake + g++). arm64
-# users who want it can pip install it after adding the toolchain.
+# gem-suite, pymatching and physics-tenpy have no aarch64 wheels, and
+# mthree has no Python 3.13 wheel on either arch. They are built from
+# source in the Dockerfile's `wheels` stage (docker/build-wheels.txt) and
+# installed from there, so they need no markers here and no compiler
+# ships in the image. Their pins must match that file.
 
 -r ../_xl-base.txt
 
@@ -59,25 +60,16 @@ qiskit-ibm-catalog~=0.21.0
 qiskit-addon-sqd~=0.13.1
 qiskit-addon-utils~=0.4.0
 # [tenpy] matches upstream: several notebooks import tenpy through mpf.
-# It is x86_64-only here, for the same reason gem-suite is: the extra
-# pulls physics-tenpy, which publishes manylinux wheels for x86_64 but
-# none for aarch64, so pip falls back to the sdist and the build dies on
-#   error: [Errno 2] No such file or directory: 'g++'
-# because the base image ships no C++ toolchain. Adding build-essential
-# to carry one arch would cost far more than the extra is worth.
-# mybinder is amd64-only, so the docs notebooks that need tenpy still
-# get it where they actually run; arm64 keeps mpf without the extra.
-qiskit-addon-mpf[tenpy]~=0.3.0; platform_machine == "x86_64"
-qiskit-addon-mpf~=0.3.0; platform_machine != "x86_64"
+# On aarch64 physics-tenpy comes from the wheels stage (see the top).
+qiskit-addon-mpf[tenpy]~=0.3.0
 qiskit-addon-aqc-tensor[aer,quimb-jax]~=0.3.1; sys.platform != 'darwin'
 qiskit-addon-obp~=0.3.0
 qiskit-addon-cutting~=0.10.0
 # Upstream pins 0.14.1; 0.14.2 is a patch ahead and stays.
 qiskit-experiments~=0.14.2
-# Pinned to upstream's version; the x86_64 marker stays because
-# gem-suite is sdist-only on aarch64 and the base image has no
-# Rust/C++ toolchain.
-gem-suite~=0.2.0; platform_machine == "x86_64"
+# Pinned to upstream's version. On aarch64 it and its dependency
+# pymatching come from the wheels stage (see the top).
+gem-suite~=0.2.0
 
 # Packages the current Qiskit docs notebooks import that the image
 # otherwise lacks (QuBins#148 group 3). Every one is a genuine
@@ -92,8 +84,8 @@ gem-suite~=0.2.0; platform_machine == "x86_64"
 # import them are the two cases absent from upstream's list, so they
 # are almost certainly self-installed.
 #
-# Arch safety: all of these are pure-python wheels except mthree and
-# qiskit-paulice, which publish manylinux wheels for both x86_64 and
+# Arch safety: all of these are pure-python wheels except
+# qiskit-paulice, which publishes manylinux wheels for both x86_64 and
 # aarch64. None needs a marker. That was verified against PyPI rather
 # than assumed -- the physics-tenpy sdist broke both arm64 builds
 # earlier on this same line of work.
@@ -113,17 +105,17 @@ imbalanced-learn~=0.14.2
 # arch, interpreter tag and requires_python before adding.
 qrmi~=0.26.0
 qiskit-mitigation~=0.1.1
-# mthree is upstream's one package we cannot take. It publishes
-# manylinux wheels for both arches but only up to cp312, with no abi3
-# wheel in any release, and this image is Python 3.13 -- so pip falls
-# back to the sdist and the build dies on a missing g++, on BOTH
-# arches. Upstream can pin it because their test environment is on an
-# older Python. Adding a C++ toolchain to every image for one notebook
-# is the wrong trade, so mthree stays out until it ships cp313 or abi3
-# wheels. (qiskit-paulice looks similar at a glance -- its wheels are
-# tagged cp310 -- but they are cp310-abi3, which is forward-compatible,
-# so it installs fine on 3.13.)
-#
+# Not in upstream's nb-tester list, but imported by current docs
+# notebooks (doQumentation sweep, 2026-10-19). Both publish wheels for
+# x86_64 and aarch64 (qiskit-fermions as cp310-abi3), checked by
+# installing them into the published image on both arches.
+qiskit-fermions~=0.2.0
+moocore~=0.3.2
+# mthree matches upstream. It has wheels only up to cp312 and no abi3
+# wheel, so it is built from source in the wheels stage on both arches
+# (see the top); pip installs that wheel via --find-links.
+mthree~=3.0.0
+
 # Not published on PyPI at all; upstream installs it straight from git
 # at a pinned commit, so this stays reproducible. It needs `git` at
 # build time, which the xl/xxl/rise apt layer already provides.

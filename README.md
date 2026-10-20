@@ -90,7 +90,7 @@ notebooks from the Qiskit documentation site should run unmodified.
 | Approx. download | ~0.4 GB | ~0.9 GB | ~4 GB (amd64) |
 | Includes | `qiskit` <br> `qiskit-aer` <br> `qiskit-ibm-runtime` | **Qiskit ecosystem:** `qiskit[all]`, all `qiskit-addon-*`, `qiskit-experiments`, `qiskit-serverless`, `qiskit-ibm-catalog` <br> **Scientific stack:** scipy, sklearn, pyscf, plotly, sympy, ffsim, pandas <br> **Notebook tooling:** `pylatexenc`, `nbgitpuller`, `jupyterlab-open-url-parameter` | Everything in **xl**, plus `qiskit-ibm-transpiler[ai-local-mode]` (pulls PyTorch + the full CUDA 13 wheelset) |
 | Load a repo (nbgitpuller) or notebook URL (`?fromURL=`) | — (bare launch only) | ✓ | ✓ (inherits from xl) |
-| arm64 caveats | none | `gem-suite` omitted (no aarch64 wheels) | the AI transpiler is amd64-only, so the arm64 build equals xl |
+| arm64 caveats | none | none from 2.5 on (packages without aarch64 wheels are built from source); 2.0–2.4 omit `gem-suite` | the AI transpiler is amd64-only, so the arm64 build equals xl |
 
 Qiskit-ecosystem packages are pinned in the xl flavor (xxl reuses
 xl's pins via a pip `-r` include and adds the transpiler pin on top);

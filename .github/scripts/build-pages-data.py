@@ -338,7 +338,7 @@ def fetch_image_meta(tag: str) -> dict:
     total = _manifest_size(manifest)
     if total > 0:
         out["size_mb"] = round(total / (1024 * 1024), 1)
-    # arm64 differs where wheels are missing (gem-suite; the whole AI
+    # arm64 differs where wheels are missing (gem-suite on 2.0-2.4; the whole AI
     # transpiler stack on xxl), so the page shows it when it differs.
     arm = _ghcr_get(f"manifests/{digests['arm64']}", MANIFEST_ACCEPT) if digests.get("arm64") else None
     arm_total = _manifest_size(arm) if arm else 0
