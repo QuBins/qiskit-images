@@ -106,11 +106,11 @@ imbalanced-learn~=0.14.2
 qrmi~=0.26.0
 qiskit-mitigation~=0.1.1
 # Not in upstream's nb-tester list, but imported by current docs
-# notebooks (doQumentation sweep, 2026-10-19). Both publish wheels for
-# x86_64 and aarch64 (qiskit-fermions as cp310-abi3), checked by
-# installing them into the published image on both arches.
-qiskit-fermions~=0.2.0
+# notebooks (doQumentation sweep, 2026-10-19). Wheels for x86_64 and
+# aarch64, checked by installing into the published image on both arches.
 moocore~=0.3.2
+# qiskit-fermions (in 2.5-xl) is NOT here: 0.2.0, its latest release,
+# requires qiskit~=2.5.0. Add it once a release allows qiskit 2.6.
 # mthree matches upstream. It has wheels only up to cp312 and no abi3
 # wheel, so it is built from source in the wheels stage on both arches
 # (see the top); pip installs that wheel via --find-links.
