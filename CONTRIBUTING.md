@@ -18,7 +18,7 @@ opening an issue.
 | `.github/workflows/build-matrix.yml` | Build, scan, publish, sign, and sync the Binder stubs. Its `ALL` list and `LATEST_QISKIT` are the source of truth for which targets exist. |
 | `.github/scripts/` | Site data (`build-pages-data.py`, `build-badges.py`), the GHCR prune, the new-minor scaffolder, the upstream drift check. |
 | `.github/ghcr-keep.txt` | Digests the prune must keep for a downstream pin, each with an expiry. |
-| `.trivyignore` | Scanner suppressions, each with its reason. |
+| `.trivyignore.yaml` | Scanner suppressions, each with its reason (scoped to a path where it is about one file). |
 | `docs/` | The site, [qubins.org](https://qubins.org/). `versions.json` and `badges/` are generated at deploy time and not committed. |
 | `tests/` | Stdlib `unittest` suite for the scripts and the security invariants. |
 

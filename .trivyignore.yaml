@@ -1,0 +1,247 @@
+# Trivy ignore list, read by the scan step in build-matrix.yml via
+# --ignorefile. YAML rather than the plain .trivyignore so an entry can be
+# limited to the file it is about (`paths:`): the aiohttp entries only
+# cover Ray's vendored copy, so a vulnerable top-level aiohttp still fails
+# the gate. Entries without `paths:` apply image-wide, as before.
+
+vulnerabilities:
+  # CVE-2026-27601 (underscore.js DoS) is no longer suppressed here: it is
+  # now actually fixed in the image. The vulnerable 1.13.7 copy is a static
+  # JS asset vendored by the base image's legacy nbclassic package; the
+  # Dockerfile now patches it in place to the upstream-fixed underscore 1.13.8
+  # (see the nbclassic note there). nbclassic itself is kept — the rise-classic
+  # UI (the featured Quantum Coin Game) depends on it — so removal was not an
+  # option. A suppression here would not help downstream consumers anyway: a
+  # repo-level ignore file does not propagate to images that re-scan the
+  # published artifact (e.g. traQmania's release gate), so the fix has to live
+  # in the image. With the asset genuinely at 1.13.8, this entry is redundant;
+  # keeping it out means CI re-blocks if the patch ever regresses.
+
+  # CVE-2026-25087 - apache-arrow C++ use-after-free DoS in pyarrow.
+  #
+  # Fixed in pyarrow 23.0.1. We cannot reach it: pyarrow is pulled in only
+  # transitively, and qiskit-serverless (in every -xl/-xxl flavor) hard-caps
+  # pyarrow<22 — true even of the latest serverless 0.32.0 (pyarrow<22,>=21).
+  # serverless itself is locked at 0.30 in the xl requirements by the
+  # runtime 0.45 / catalog 0.14 / transpiler 0.18 consistency set, so there
+  # is no installable pyarrow that both clears the CVE and satisfies the
+  # pinned ecosystem. The flaw is a DoS that requires processing a malicious
+  # Arrow/Parquet payload (no network exposure in these notebooks); pyarrow
+  # is not used directly by anything we ship.
+  #
+  # Drop this entry once qiskit-serverless relaxes its pyarrow<22 cap to
+  # admit >=23.0.1 (track upstream), or if the xl serverless pin moves off
+  # the 0.30 line to a release that does.
+  - id: CVE-2026-25087
+
+  # GHSA-36hh-v3qg-5jq4 - pyo3 out-of-bounds read in nth/nth_back for
+  # PyList/PyTuple iterators (HIGH; fixed in 0.29.0).
+  #
+  # pyo3 is a Rust<->Python binding crate compiled *into* other packages'
+  # native wheels in the base image's conda environment (e.g. cryptography
+  # and friends); it is not a pip-installable package we pin or can
+  # `pip upgrade` directly — the fix only arrives when those upstream
+  # wheels rebuild against pyo3 0.29. It came in with the base bump to
+  # 9388739d, which on balance is a big win: that digest cleared the
+  # libssl, jupyter-server, PyJWT, tornado and cryptography findings AND
+  # the rust-openssl/AWS-LC RCE set (CVE-2026-42327) that blocked the
+  # earlier e9bea43 (#83) and 0b358e9e (#87) bumps. The flaw is an OOB
+  # *read* (info-disclosure/crash), not RCE, reachable only via in-process
+  # Python iterating a maliciously-constructed native sequence.
+  #
+  # Drop this once the base image's wheels rebuild against pyo3 >=0.29.0.
+  - id: GHSA-36hh-v3qg-5jq4
+
+  # GHSA-4w2j-m93h-cj5j - quinn-proto remote memory exhaustion from unbounded
+  # out-of-order QUIC stream reassembly (HIGH; fixed in 0.11.15).
+  #
+  # Same shape as the pyo3 entry above: quinn-proto is a Rust QUIC crate
+  # *compiled into* py-rattler's native extension
+  #   opt/conda/lib/python3.13/site-packages/rattler/rattler.abi3.so
+  # (Trivy reads it as a `rustbinary`). rattler is the Rust conda-package
+  # library baked into the base image's conda env; quinn-proto is not a
+  # pip-installable package we pin or can `pip upgrade` — the fix only arrives
+  # when rattler's wheel rebuilds against quinn-proto >=0.11.15. It hit every
+  # flavor (incl. -small) because it lives in the base conda env, and entered
+  # Trivy's DB between the 07-24 (green) and 07-25 (red) nightly runs. The flaw
+  # is a QUIC-peer DoS reachable only when rattler opens a QUIC/HTTP3 connection
+  # to a malicious conda channel; rattler is an environment-management tool that
+  # nothing in these notebooks invokes at runtime, so the path is unreachable.
+  #
+  # Drop once the base image's rattler wheel rebuilds against quinn-proto
+  # >=0.11.15 (a base digest bump will likely clear this together with pyo3).
+  - id: GHSA-4w2j-m93h-cj5j
+
+  # CVE-2026-54512 / CVE-2026-54513 - jackson-databind unsafe-polymorphic
+  # deserialization gadgets (both HIGH; PolymorphicTypeValidator bypass and
+  # array-subtype allowlist bypass respectively; fixed in 2.18.8/2.21.4/3.1.4).
+  #
+  # The flagged jackson-databind 2.18.6 is a Java jar vendored *inside* Ray's
+  # distribution jar at
+  #   opt/conda/lib/python3.13/site-packages/ray/jars/ray_dist.jar
+  # Ray is pulled into every -xl/-xxl flavor transitively via qiskit-serverless
+  # (pinned ~=0.30 in the xl requirements). jackson is not a pip-installable
+  # package we can `pip upgrade` — it ships bundled in ray_dist.jar, so the fix
+  # only arrives when Ray rebundles a patched jackson. Only xl/xxl carry Ray;
+  # the -small flavors don't, which is why they keep passing. Both CVEs are
+  # exploitable only when attacker-controlled JSON is deserialized with default
+  # typing / unsafe polymorphic handling enabled — not something these notebooks
+  # expose; nothing we ship drives Ray's JVM deserialization on untrusted input.
+  #
+  # Drop these once Ray rebundles jackson-databind >=2.18.8 (track upstream Ray
+  # releases), or if the xl serverless pin moves to a Ray that already has it.
+  - id: CVE-2026-54512
+  - id: CVE-2026-54513
+
+  # GHSA-r7wm-3cxj-wff9 - jackson-core async-parser maxNumberLength bypass
+  # (HIGH; a crafted JSON number can exceed the configured length limit in the
+  # non-blocking/async parser, a DoS; fixed in 2.18.8/2.21.4/2.22.1).
+  #
+  # Same situation and same jar as the jackson-databind pair above: the flagged
+  # jackson-core 2.18.6 is vendored *inside* Ray's ray_dist.jar (xl/xxl only, via
+  # qiskit-serverless ~=0.30); not pip-upgradable, so the fix only lands when Ray
+  # rebundles a patched jackson. Entered Trivy's DB between the 07-21 (green) and
+  # 07-22 (red) nightly runs, alongside the base-layer jupyterlab XSS advisories
+  # fixed in-image on the Dockerfile pip line. The async streaming parser this
+  # affects is not driven on untrusted input by anything these notebooks ship.
+  #
+  # Drop once Ray rebundles jackson-core >=2.18.8 (track upstream Ray releases),
+  # or if the xl serverless pin moves to a Ray that already has it.
+
+  # CVE-2026-69244 - aiohttp HIGH (fixed 3.14.3).
+  #
+  # The top-level aiohttp our stack actually imports is upgraded to 3.14.3 by a
+  # floor in versions/_xl-base.txt, so that copy is clean. This suppression is
+  # for a SECOND, stale copy Ray vendors inside its own runtime_env agent:
+  #   opt/conda/lib/python3.13/site-packages/ray/_private/runtime_env/agent/thirdparty_files/aiohttp-3.14.1.dist-info
+  # Same jar/vendored-copy situation as the jackson entries above (xl/xxl only,
+  # via qiskit-serverless -> Ray): it is not a pip-installable package we can
+  # upgrade — the fix only lands when Ray rebundles a patched aiohttp. This copy
+  # powers Ray's internal runtime_env agent (dashboard/agent HTTP), which nothing
+  # in these notebooks drives on untrusted input.
+  #
+  # Drop once Ray rebundles aiohttp >=3.14.3 (track upstream Ray releases), or if
+  # the xl serverless pin moves to a Ray that already has it.
+  - id: CVE-2026-69244
+    paths:
+      - "opt/conda/lib/python3.13/site-packages/ray/_private/runtime_env/agent/thirdparty_files/**"
+
+  # CVE-2026-111064 + GHSA-2g87-pp6c-29x5 - aiohttp HIGH (fixed 3.14.4).
+  #
+  # Same vendored copy as CVE-2026-69244 above, now at 3.14.3:
+  #   opt/conda/lib/python3.13/site-packages/ray/_private/runtime_env/agent/thirdparty_files/aiohttp-3.14.3.dist-info
+  # Found in the frozen-minor xl/xxl images (2.0-2.4, Ray 2.59 via their
+  # qiskit-serverless pins); 2.5/2.6 ship a Ray that passes. The top-level
+  # aiohttp is floored to >=3.14.4 in every image (Dockerfile post-install
+  # floors, and versions/_xl-base.txt), so this suppression only matters for
+  # Ray's internal runtime_env agent, same rationale as above.
+  #
+  # Drop with CVE-2026-69244 once Ray rebundles aiohttp >=3.14.4, or once the
+  # frozen minors move to a Ray that has it.
+  - id: CVE-2026-111064
+    paths:
+      - "opt/conda/lib/python3.13/site-packages/ray/_private/runtime_env/agent/thirdparty_files/**"
+  - id: GHSA-2g87-pp6c-29x5
+    paths:
+      - "opt/conda/lib/python3.13/site-packages/ray/_private/runtime_env/agent/thirdparty_files/**"
+
+  # CVE-2026-54399 - Apache HttpCore5 HIGH (flagged httpcore5 5.0.2; fixed in
+  # 5.4.3 / 5.5-beta2).
+  #
+  # Same jar and same situation as the jackson entries above: httpcore5 is a Java
+  # HTTP library vendored *inside* Ray's distribution jar at
+  #   opt/conda/lib/python3.13/site-packages/ray/jars/ray_dist.jar
+  # (Trivy scans it as target type `jar`). Ray comes in transitively via
+  # qiskit-serverless (~=0.30 in the xl requirements), so this is xl/xxl/rise
+  # only — the -small flavors have no Ray and stayed green through the 08-13
+  # nightly (18 of 34 jobs red, all xl/xxl/rise). It is not a pip-installable
+  # package we can `pip upgrade`; the fix only lands when Ray rebundles a patched
+  # httpcore5. The library serves Ray's JVM-side HTTP stack (Java workers /
+  # cross-language calls), which nothing in these notebooks starts — the Python
+  # Ray path we use never brings the JVM up, so the code is not merely
+  # untrusted-input-free, it is never loaded.
+  #
+  # Drop once Ray rebundles httpcore5 >=5.4.3 (track upstream Ray releases), or if
+  # the xl serverless pin moves to a Ray that already has it.
+
+  # CVE-2026-68497 - jackson-databind HIGH (flagged 2.18.8 inside Ray's
+  # ray_dist.jar; fixed in 2.18.10 / 2.21.6 / 2.22.2).
+  #
+  # Same vendored-jar situation as GHSA-r7wm above: jackson-databind is a Java
+  # dependency Ray bundles inside ray_dist.jar, reached only via
+  # qiskit-serverless -> Ray. It is not a pip-installable package, so no floor
+  # can move it; the fix lands only when Ray rebundles a patched jackson.
+  #
+  # The 2026-09-29 nightly (run 36554075922) is the proof that it HAS been
+  # rebundled upstream: 14 build jobs failed on this, and they were exactly the
+  # xl/xxl flavors of 2.0-2.4, which pin qiskit-serverless 0.27-0.30. The 2.5
+  # flavors PASSED the same scan on the same day, because #150 moved 2.5-xl to
+  # serverless 0.35.1 and that pulls a Ray whose jar already carries a patched
+  # jackson. 1.4-xl also passed: it ships no serverless, so no Ray at all.
+  #
+  # So this suppression is scoped, in practice, to the older minors, which are
+  # deliberately frozen reproducible environments -- their serverless pins are
+  # part of a mutually-consistent set tied to their Qiskit minor, and bumping
+  # them to chase a vendored jar would defeat the point of pinning them.
+  # Nothing in these notebooks drives Ray's Java serialization path on
+  # untrusted input.
+  #
+  # Drop this once the 2.0-2.4 lines are retired, or if their serverless pins
+  # ever move to a Ray that already carries the patched jar. It should NOT be
+  # needed by 2.5 or later -- if a future 2.5 scan trips this ID again, that is
+  # a regression worth investigating rather than something this entry should
+  # quietly cover.
+  # CVE-2026-89407, CVE-2026-91776 - two more jackson-databind HIGHs in the
+  # same ray_dist.jar (2.18.8; fixed 2.18.11 / 2.21.7 / 2.22.3), landing in
+  # Trivy's DB on 2026-10-02, three days after CVE-2026-68497. Identical
+  # situation and identical scoping: the 2026-10-02 matrix failed exactly
+  # the 2.0-2.4 xl/xxl flavors and every 2.5 flavor passed, because 2.5
+  # runs qiskit-serverless 0.35.1 and a Ray with a patched jar.
+  #
+  # Third jackson round in a month, all from the same vendored jar. If
+  # that cadence holds, the durable fix is not another suppression but
+  # moving qiskit-serverless (and with it Ray) off the frozen minors --
+  # see the discussion on scoping serverless to xxl only.
+
+  # Trivy layer-resolution artefacts, NOT vulnerabilities in the image:
+  #   GHSA-6v7p-g79w-8964  msgpack     reported 1.1.2  (image has 1.2.3)
+  #   CVE-2025-47273       setuptools  reported 70.3.0 (image has 84.0.0)
+  #   CVE-2026-97687/97689 urllib3     reported 2.7.0  (image has 2.8.0)
+  #
+  # Trivy reports these from a base-image layer whose files were replaced
+  # further up the same base. Verified on 2026-10-02 by building
+  # 1.4-small locally against base digest 4ef9cfd5 and scanning it with
+  # the same trivy 0.70.0 CI uses:
+  #
+  #   - the image's installed versions are msgpack 1.2.3, urllib3 2.8.0,
+  #     setuptools 84.0.0 (importlib.metadata, inside the image)
+  #   - `find /` over the whole filesystem finds NO msgpack-1.1.2,
+  #     urllib3-2.7.0 or setuptools-70.3.0 dist-info anywhere, and there
+  #     is only one site-packages tree
+  #   - all three findings carry the same Layer.DiffID
+  #     sha256:692b40f1..., which is layer 13 of 37 -- a BASE layer, long
+  #     before any layer this Dockerfile adds
+  #   - scanning the base image on its own reproduces all three
+  #     identically, so nothing in this repo influences them
+  #
+  # No pin can fix a stale layer, which is why this is a suppression and
+  # not a floor. The Dockerfile DOES still floor all three after the
+  # requirements install, so the versions actually shipped stay correct
+  # and a genuine future regression is prevented there rather than being
+  # relied on from the scanner.
+  #
+  # Drop these once the base stops carrying the superseded layers, or
+  # once Trivy resolves overwritten package metadata across layers.
+  - id: GHSA-6v7p-g79w-8964
+  - id: CVE-2025-47273
+  - id: CVE-2026-97687
+  - id: CVE-2026-97689
+
+  # Historical note: GHSA-r7wm-3cxj-wff9, CVE-2026-54399, CVE-2026-68497,
+  # CVE-2026-89407 and CVE-2026-91776 used to be listed here. They were
+  # all findings inside Ray's vendored ray_dist.jar, and that whole file
+  # is now excluded from the scan via --skip-files in build-matrix.yml,
+  # which makes per-ID entries redundant. See the rationale there.
+  #
+  # CVE-2026-69244 (aiohttp) stays below: it is a separate vendored copy
+  # under ray/_private/runtime_env/agent/thirdparty_files, not in the jar.
