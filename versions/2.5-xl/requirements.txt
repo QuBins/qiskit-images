@@ -132,7 +132,7 @@ qiskit-device-benchmarking @ git+https://github.com/qiskit-community/qiskit-devi
 # Dockerfile enables autolaunch + its watchdog wherever classic RISE is
 # installed. Only the classic /nbclassic/ frontend is affected, not Lab.
 # Same pins and reasons as versions/2.1-xl-rise/requirements.txt.
-notebook>=7
+notebook>=7.6.3
 rise==5.7.1
 # The games' widgets. 2.1-xl gets ipywidgets transitively (8.1.9, with
 # widgetsnbextension 4.0.16 for the classic frontend and
