@@ -289,7 +289,7 @@ RUN --mount=type=bind,source=versions,target=/tmp/versions \
       -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
  && pip_retry --upgrade 'msgpack>=1.2.1' 'urllib3>=2.8.0' 'setuptools>=78.1.1' 'aiohttp>=3.14.4' \
       'certifi>=2026.10.19' 'pip>=26.2.2' 'nbconvert>=7.17.2' \
- && { pip check > /tmp/pip-check.txt 2>&1 || true; } \
+ && { pip check > /tmp/pip-check.txt || true; } \
  && cat /tmp/pip-check.txt \
  && if [ ! -s /tmp/pip-check.txt ] || [ "$(grep -cvE '^(No broken requirements found\.|qiskit-serverless [^ ]+ has requirement certifi==.*)$' /tmp/pip-check.txt)" != 0 ]; then \
       echo 'pip check failed (only qiskit-serverless pinning certifi is tolerated)' >&2; exit 1; \
