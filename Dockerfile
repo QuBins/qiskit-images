@@ -174,6 +174,13 @@ RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl || "${QISK
 # write) hits the base's nbconvert 7.17.1. Drop each once the base ships
 # the fixed version.
 #
+# qiskit-serverless pins certifi to an exact version (==2024.7.4 in
+# 0.27, ==2026.7.22 in 0.37, the latest), so the certifi floor breaks
+# `pip check` in every xl/xxl image. certifi is only a CA bundle with no
+# API, so newer is safe for serverless; `pip check` therefore tolerates
+# exactly that one line and still fails on anything else. Remove the
+# exception once serverless pins certifi >= 2026.10.19 (or unpins it).
+#
 # jupyterlab is deliberately NOT floored here any more. It used to be
 # pinned `>=4.5.10,<4.6` to hold the 4.5 line; the new base ships
 # 4.6.4, so that cap would now downgrade the base rather than protect
@@ -282,7 +289,12 @@ RUN --mount=type=bind,source=versions,target=/tmp/versions \
       -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
  && pip_retry --upgrade 'msgpack>=1.2.1' 'urllib3>=2.8.0' 'setuptools>=78.1.1' 'aiohttp>=3.14.4' \
       'certifi>=2026.10.19' 'pip>=26.2.2' 'nbconvert>=7.17.2' \
- && pip check \
+ && { pip check > /tmp/pip-check.txt 2>&1 || true; } \
+ && cat /tmp/pip-check.txt \
+ && if [ ! -s /tmp/pip-check.txt ] || [ "$(grep -cvE '^(No broken requirements found\.|qiskit-serverless [^ ]+ has requirement certifi==.*)$' /tmp/pip-check.txt)" != 0 ]; then \
+      echo 'pip check failed (only qiskit-serverless pinning certifi is tolerated)' >&2; exit 1; \
+    fi \
+ && rm -f /tmp/pip-check.txt \
  && PYTHONHASHSEED=0 python -B /tmp/compile-pyc.py \
  && fix-permissions "${CONDA_DIR}" \
  && fix-permissions "/home/${NB_USER}"
