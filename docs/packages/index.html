@@ -24,6 +24,17 @@
   .pk-change h3 { font-size: 1em; margin: 0 0 0.3rem; }
   .pk-change ul { margin: 0; padding-left: 1.2rem; }
   .pk-change code { overflow-wrap: anywhere; }
+  /* Reserve space for what loads late (CLS): the meta line, a fixed-height
+     scroll box for the change history, and a viewport-tall, fixed-layout
+     table so the rows filling in neither resize the columns nor push the
+     notes and footer around. */
+  #pk-tag { min-width: 9rem; }
+  #pk-meta { min-height: 3em; }
+  #pk-history { height: 16rem; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 0 0.75rem; }
+  .pk-table-wrap { min-height: 100vh; }
+  .pk-table { table-layout: fixed; }
+  .pk-table th:nth-child(1) { width: 45%; }
+  .pk-table th:nth-child(2) { width: 15%; }
 </style>
 </head>
 <body>
@@ -41,17 +52,19 @@
   </section>
   <section>
     <h2>Recent changes</h2>
-    <div id="pk-history"><p class="notes">Loading&hellip;</p></div>
+    <div id="pk-history" tabindex="0" role="region" aria-label="Recent changes"><p class="notes">Loading&hellip;</p></div>
   </section>
   <section>
     <h2>All packages</h2>
     <div class="pk-controls">
       <input id="pk-filter" type="search" placeholder="Filter, e.g. qiskit" aria-label="Filter packages">
     </div>
+    <div class="pk-table-wrap">
     <table class="pk-table">
       <thead><tr><th>Package</th><th>Source</th><th>Version</th></tr></thead>
       <tbody id="pk-list"></tbody>
     </table>
+    </div>
     <p class="notes">The same list ships inside every image at <code>/opt/qubins/packages.json</code>. Machine-readable per tag at <code>https://qubins.org/packages/&lt;tag&gt;.json</code> (see the README, &ldquo;Package lists&rdquo;).</p>
   </section>
 </main>
