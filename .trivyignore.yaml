@@ -126,7 +126,8 @@ vulnerabilities:
     paths:
       - "opt/conda/lib/python3.13/site-packages/ray/_private/runtime_env/agent/thirdparty_files/**"
 
-  # CVE-2026-111064 + GHSA-2g87-pp6c-29x5 - aiohttp HIGH (fixed 3.14.4).
+  # CVE-2026-111064 + GHSA-2g87-pp6c-29x5 + CVE-2026-111066 - aiohttp HIGH
+  # (all fixed 3.14.4; CVE-2026-111066, a DoS, was added 2026-10-21).
   #
   # Same vendored copy as CVE-2026-69244 above, now at 3.14.3:
   #   opt/conda/lib/python3.13/site-packages/ray/_private/runtime_env/agent/thirdparty_files/aiohttp-3.14.3.dist-info
@@ -142,6 +143,9 @@ vulnerabilities:
     paths:
       - "opt/conda/lib/python3.13/site-packages/ray/_private/runtime_env/agent/thirdparty_files/**"
   - id: GHSA-2g87-pp6c-29x5
+    paths:
+      - "opt/conda/lib/python3.13/site-packages/ray/_private/runtime_env/agent/thirdparty_files/**"
+  - id: CVE-2026-111066
     paths:
       - "opt/conda/lib/python3.13/site-packages/ray/_private/runtime_env/agent/thirdparty_files/**"
 
