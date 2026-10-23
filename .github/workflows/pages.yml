@@ -103,6 +103,20 @@ jobs:
       - name: Build versions.json
         run: python3 .github/scripts/build-pages-data.py
 
+      - name: Bake the latest Qiskit minor into the hero
+        # app.js fills these from versions.json too, but text that changes
+        # after first paint rewraps the hero and shifts the page (CLS).
+        # Writing the current value into the HTML makes the JS update a
+        # no-op. The repo copy carries a recent value for local previews.
+        run: |
+          set -euo pipefail
+          latest="$(python3 -c 'import json; print(json.load(open("docs/versions.json"))["latest_qiskit"])')"
+          sed -i -E \
+            -e "s|(<code id=\"qs-latest\">)[^<]*(</code>)|\\1${latest}\\2|" \
+            -e "s|(<code id=\"qs-latest-tag\">)[^<]*(</code>)|\\1latest-xl (= ${latest}-xl)\\2|" \
+            docs/index.html
+          grep -oE '<code id="qs-latest(-tag)?">[^<]*</code>' docs/index.html
+
       - name: Build badges
         run: python3 .github/scripts/build-badges.py
 

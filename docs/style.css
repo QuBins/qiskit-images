@@ -107,6 +107,7 @@ nav.topnav {
 nav.topnav a {
   color: var(--fg-muted);
   padding: 0.2rem 0;
+  text-decoration: none;
 }
 nav.topnav a:hover {
   color: var(--accent);
@@ -119,6 +120,7 @@ nav.topnav a:hover {
 
 .badges a {
   margin-right: 0.75rem;
+  text-decoration: none;
 }
 
 section {
@@ -178,13 +180,18 @@ pre code {
   padding: 0;
 }
 
+/* Underlined, not colour alone: in-text links must be distinguishable
+   without colour (WCAG 1.4.1, axe link-in-text-block). Components that
+   look like buttons, chips or cards opt out below with their own rule. */
 a {
   color: var(--accent);
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
 }
 
 a:hover {
-  text-decoration: underline;
+  text-decoration-thickness: 2px;
 }
 
 .button {
