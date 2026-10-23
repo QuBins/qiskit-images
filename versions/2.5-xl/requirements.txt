@@ -58,7 +58,7 @@ qiskit-ibm-runtime~=0.50.0
 qiskit-aer~=0.17
 qiskit-serverless~=0.37.0
 qiskit-ibm-catalog~=0.21.0
-qiskit-addon-sqd~=0.13.1
+qiskit-addon-sqd~=0.14.0
 qiskit-addon-utils~=0.4.0
 # [tenpy] matches upstream: several notebooks import tenpy through mpf.
 # On aarch64 physics-tenpy comes from the wheels stage (see the top).
