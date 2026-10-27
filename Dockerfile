@@ -174,6 +174,11 @@ RUN if [[ "${QISKIT_VERSION}" == *-xl || "${QISKIT_VERSION}" == *-xxl || "${QISK
 # write) hits the base's nbconvert 7.17.1. Drop each once the base ships
 # the fixed version.
 #
+# brotli is the same kind again (added 2026-10-27 after three red
+# nightlies): GHSA-9v8h-qqgm-4m35 (CRITICAL, out-of-bounds write in the
+# decoder, fixed in 1.2.1) hits the base's conda brotli-python 1.2.0 in
+# every image. Drop it once the base ships >= 1.2.1.
+#
 # qiskit-serverless pins certifi to an exact version (==2024.7.4 in
 # 0.27, ==2026.7.22 in 0.37, the latest), so the certifi floor breaks
 # `pip check` in every xl/xxl image. certifi is only a CA bundle with no
@@ -288,7 +293,7 @@ RUN --mount=type=bind,source=versions,target=/tmp/versions \
     pip_retry --find-links /tmp/wheels -c /tmp/wheels/constraints.txt \
       -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
  && pip_retry --upgrade 'msgpack>=1.2.1' 'urllib3>=2.8.0' 'setuptools>=78.1.1' 'aiohttp>=3.14.4' \
-      'certifi>=2026.10.19' 'pip>=26.2.2' 'nbconvert>=7.17.2' \
+      'certifi>=2026.10.19' 'pip>=26.2.2' 'nbconvert>=7.17.2' 'brotli>=1.2.1' \
  && { pip check > /tmp/pip-check.txt || true; } \
  && cat /tmp/pip-check.txt \
  && if [ ! -s /tmp/pip-check.txt ] || [ "$(grep -cvE '^(No broken requirements found\.|qiskit-serverless [^ ]+ has requirement certifi==.*)$' /tmp/pip-check.txt)" != 0 ]; then \
