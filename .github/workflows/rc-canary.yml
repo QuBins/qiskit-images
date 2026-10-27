@@ -143,7 +143,7 @@ jobs:
           ENV QUBINS_CANARY_QISKIT=${RC}
           RUN pip install --no-cache-dir --upgrade-strategy only-if-needed "qiskit==${RC}" \
            && { pip check || true; } \
-           && python -c 'import os, qiskit; v = os.environ["QUBINS_CANARY_QISKIT"]; assert qiskit.__version__ == v, (qiskit.__version__, v); print("qiskit", v, "OK")' \
+           && python -c 'import os, qiskit, importlib.metadata as m; v = os.environ["QUBINS_CANARY_QISKIT"]; assert m.version("qiskit") == v, (m.version("qiskit"), v); print("qiskit", v, "OK")' \
            && python - <<'PY'
           import importlib, importlib.metadata as m
           bad = []
