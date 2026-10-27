@@ -1,0 +1,176 @@
+name: Qiskit rc canary
+
+# Test-only "canary" images built from Qiskit pre-releases (rc/beta), so
+# doQumentation's notebook sweep can catch regressions before a release
+# ships. 2.6's decompose() hang (Qiskit#16753) was in 2.6.0rc1 and was
+# only found after 2.6.0 was out; an rc image would have caught it in
+# time to fix upstream.
+#
+# What it builds: the published latest xl image (LATEST_QISKIT in
+# build-matrix.yml) with the pre-release installed over its Qiskit. It
+# does NOT re-resolve the xl set: most add-ons cap qiskit below the next
+# minor, so a clean resolve against an rc is impossible. pip installs
+# the rc plus any dependency bump it needs, and `pip check` conflicts
+# are reported, not fatal. That exercises core Qiskit, which is the
+# point; add-ons that break on the new minor show up in the sweep.
+#
+# Tags (multi-arch, amd64 + arm64):
+#   X.Y.ZrcN-xl   one per pre-release
+#   X.Y-rc-xl     moving, the newest pre-release of X.Y
+#
+# Deliberately kept OUT of everything user-facing: no latest-* alias,
+# no versions/ folder (so not on the website or in the build matrix),
+# no Binder warm-up, no stub branch.
+#
+# No Trivy gate: the base is the published xl image, which already
+# passed it, and only Qiskit (and possibly a dependency) changes.
+#
+# Cleanup: once a pre-release's final ships, its GHCR version is
+# deleted (standing OK from Jan, 2026-10-27). See rc-canary.py.
+
+on:
+  # A change to the canary itself test-builds it (never publishes) against
+  # the newest pre-release ever published, live or not.
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/rc-canary.yml'
+      - '.github/scripts/rc-canary.py'
+  schedule:
+    # 05:30 UTC: after the nightly build matrix (04:00), so the base is
+    # that day's xl image.
+    - cron: '30 5 * * *'
+  workflow_dispatch:
+    inputs:
+      qiskit:
+        description: >-
+          Qiskit pre-release to build (e.g. 2.7.0rc1). Empty = the newest
+          pre-release on PyPI whose final has not shipped.
+        type: string
+        default: ''
+      force:
+        description: 'Rebuild even if the tag already exists'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write   # GHCR push and the stale-canary DELETE
+
+concurrency:
+  group: rc-canary
+  cancel-in-progress: false
+
+env:
+  # Only main publishes or deletes; a dispatch from a branch builds for
+  # CI signal only, like build-matrix.yml.
+  PUBLISH: ${{ github.ref == 'refs/heads/main' }}
+
+jobs:
+  canary:
+    name: canary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Plan
+        id: plan
+        env:
+          QISKIT: ${{ inputs.qiskit }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          fallback=()
+          [ "$EVENT" = pull_request ] && fallback=(--fallback-newest)
+          python3 .github/scripts/rc-canary.py plan --qiskit "$QISKIT" "${fallback[@]}"
+          latest=$(sed -nE "s/^  LATEST_QISKIT: '([0-9.]+)'.*/\1/p" .github/workflows/build-matrix.yml)
+          test -n "$latest"
+          echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+          echo "base=${latest}-xl" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if already built
+        id: gate
+        if: steps.plan.outputs.rc != ''
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ghcr.io/${{ steps.plan.outputs.owner_lc }}/images:${{ steps.plan.outputs.rc }}-xl
+          FORCE: ${{ inputs.force || 'false' }}
+        run: |
+          set -euo pipefail
+          if [ "$FORCE" != true ] && [ "$EVENT" = schedule ] \
+             && docker buildx imagetools inspect "$REF" >/dev/null 2>&1; then
+            echo "$REF already exists; nothing to build."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-qemu-action@v4
+        if: steps.gate.outputs.go == 'true'
+
+      - uses: docker/setup-buildx-action@v4
+        if: steps.gate.outputs.go == 'true'
+
+      - uses: docker/login-action@v4
+        if: steps.gate.outputs.go == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (and push on main)
+        if: steps.gate.outputs.go == 'true'
+        env:
+          RC: ${{ steps.plan.outputs.rc }}
+          TAGS: ${{ steps.plan.outputs.tags }}
+          BASE: ghcr.io/${{ steps.plan.outputs.owner_lc }}/images:${{ steps.plan.outputs.base }}
+          REPO: ghcr.io/${{ steps.plan.outputs.owner_lc }}/images
+        run: |
+          set -euo pipefail
+          tag_args=()
+          for t in $TAGS; do tag_args+=(-t "$REPO:$t"); done
+          if [ "$PUBLISH" = true ]; then out=(--push); else out=(); fi
+          # The smoke step fails only if Qiskit itself is wrong or does
+          # not import. Other qiskit* packages that fail to import are
+          # listed (they may cap the old minor) but do not fail the build.
+          docker buildx build --platform linux/amd64,linux/arm64 --provenance=false \
+            --build-arg BASE="$BASE" --build-arg RC="$RC" \
+            --label org.opencontainers.image.description="UNSTABLE test-only canary: $BASE with qiskit $RC" \
+            "${tag_args[@]}" "${out[@]}" -f - . <<'EOF'
+          ARG BASE
+          FROM ${BASE}
+          ARG RC
+          ENV QUBINS_CANARY_QISKIT=${RC}
+          RUN pip install --no-cache-dir --upgrade-strategy only-if-needed "qiskit==${RC}" \
+           && { pip check || true; } \
+           && python -c 'import os, qiskit; v = os.environ["QUBINS_CANARY_QISKIT"]; assert qiskit.__version__ == v, (qiskit.__version__, v); print("qiskit", v, "OK")' \
+           && python - <<'PY'
+          import importlib, importlib.metadata as m
+          bad = []
+          for d in sorted({d.metadata["Name"] for d in m.distributions()}):
+              if not d.lower().startswith("qiskit") or d.lower() == "qiskit":
+                  continue
+              mods = (m.distribution(d).read_text("top_level.txt") or d.replace("-", "_")).split()
+              for mod in mods:
+                  try:
+                      importlib.import_module(mod)
+                  except Exception as e:
+                      bad.append(f"{d} ({mod}): {type(e).__name__}: {e}")
+          print("\n".join(["Add-on import failures with this rc:"] + bad) if bad else "All qiskit* add-ons import.")
+          PY
+          EOF
+          {
+            echo "### Qiskit canary"
+            echo "- qiskit \`$RC\` on \`$BASE\`"
+            echo "- tags: $(printf '`%s` ' $TAGS)"
+            echo "- published: $PUBLISH"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Delete stale canaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          apply=()
+          [ "$PUBLISH" = true ] && apply=(--apply)
+          python3 .github/scripts/rc-canary.py cleanup --owner '${{ github.repository_owner }}' "${apply[@]}"
