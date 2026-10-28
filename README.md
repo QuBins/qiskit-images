@@ -115,7 +115,9 @@ launch link, and optionally a Markdown badge to embed in your README.
 Readers land in a verified, daily-rebuilt Qiskit container on
 [mybinder.org](https://mybinder.org) — no environment setup on the
 reader's machine, no Qiskit-version drift between authoring and
-reading.
+reading. doQumentation uses these images to [run IBM Quantum's Qiskit
+tutorials in the browser](https://doqumentation.org/run-qiskit-in-browser),
+with nothing to install.
 
 > **Connecting to real IBM Quantum hardware from a Binder session?**
 > mybinder is a shared, public environment — don't call
