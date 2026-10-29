@@ -292,7 +292,7 @@ RUN --mount=type=bind,source=versions,target=/tmp/versions \
     }; \
     pip_retry --find-links /tmp/wheels -c /tmp/wheels/constraints.txt \
       -r /tmp/versions/${QISKIT_VERSION}/requirements.txt \
- && pip_retry --upgrade 'msgpack>=1.2.1' 'urllib3>=2.8.0' 'setuptools>=78.1.1' 'aiohttp>=3.14.4' \
+ && pip_retry --upgrade 'msgpack>=1.2.3' 'urllib3>=2.8.0' 'setuptools>=78.1.1' 'aiohttp>=3.14.4' \
       'certifi>=2026.10.19' 'pip>=26.2.2' 'nbconvert>=7.17.2' 'brotli>=1.2.1' \
  && { pip check > /tmp/pip-check.txt || true; } \
  && cat /tmp/pip-check.txt \

@@ -72,6 +72,24 @@ vulnerabilities:
   # >=0.11.15 (a base digest bump will likely clear this together with pyo3).
   - id: GHSA-4w2j-m93h-cj5j
 
+  # CVE-2026-115905 / GHSA-m665-v7pm-7grj - zip crate "zip cloaking"
+  # (CRITICAL; fixed in 9.0.5): a crafted archive whose local file headers
+  # disagree with its central directory can make a streaming extractor
+  # write a different path than an inspector saw.
+  #
+  # Same file and same situation as quinn-proto above: the zip crate is
+  # compiled into the base image's rattler.abi3.so (Trivy sees zip 8.6.0)
+  # and no pip floor can reach it. Entered Trivy's DB before the
+  # 2026-10-29 nightly, which failed all 36 build jobs on it. No
+  # newer wheel helps yet: py-rattler 0.28.0 (2026-10-23), the latest,
+  # still bundles zip 9.0.4. rattler only extracts conda packages from
+  # the channels it is pointed at, and nothing in these notebooks runs it.
+  #
+  # Drop once the base image ships a rattler built against zip >= 9.0.5.
+  - id: CVE-2026-115905
+    paths:
+      - "opt/conda/lib/python3.13/site-packages/rattler/rattler.abi3.so"
+
   # CVE-2026-54512 / CVE-2026-54513 - jackson-databind unsafe-polymorphic
   # deserialization gadgets (both HIGH; PolymorphicTypeValidator bypass and
   # array-subtype allowlist bypass respectively; fixed in 2.18.8/2.21.4/3.1.4).
@@ -211,6 +229,13 @@ vulnerabilities:
   #   GHSA-6v7p-g79w-8964  msgpack     reported 1.1.2  (image has 1.2.3)
   #   CVE-2025-47273       setuptools  reported 70.3.0 (image has 84.0.0)
   #   CVE-2026-97687/97689 urllib3     reported 2.7.0  (image has 2.8.0)
+  #   CVE-2026-114613      msgpack     reported 1.1.2  (image has 1.2.4)
+  #
+  # CVE-2026-114613 (HIGH, fixed in 1.2.3) joined this group on 2026-10-28
+  # and blocked every build that night and the next: the same phantom
+  # msgpack 1.1.2 as GHSA-6v7p-g79w-8964. pip 26.2.2, the newest pip, also
+  # vendors msgpack 1.1.2 (pip/_vendor, listed in its bom.cdx.json), but the
+  # flaw is a memory leak in the C extension, and pip's copy is pure Python.
   #
   # Trivy reports these from a base-image layer whose files were replaced
   # further up the same base. Verified on 2026-10-02 by building
@@ -237,6 +262,7 @@ vulnerabilities:
   # Drop these once the base stops carrying the superseded layers, or
   # once Trivy resolves overwritten package metadata across layers.
   - id: GHSA-6v7p-g79w-8964
+  - id: CVE-2026-114613
   - id: CVE-2025-47273
   - id: CVE-2026-97687
   - id: CVE-2026-97689
