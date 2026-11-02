@@ -90,7 +90,7 @@ gem-suite~=0.2.0
 # than assumed -- the physics-tenpy sdist broke both arm64 builds
 # earlier on this same line of work.
 qiskit-addon-pna~=0.2.0
-qiskit-addon-slc~=0.1.0
+qiskit-addon-slc~=0.2.0
 qiskit-addon-opt-mapper~=0.1.0
 qiskit-basis-constructor~=0.1.0
 qiskit-paulice~=0.2.1
