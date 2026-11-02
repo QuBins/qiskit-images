@@ -80,13 +80,43 @@ vulnerabilities:
   # Same file and same situation as quinn-proto above: the zip crate is
   # compiled into the base image's rattler.abi3.so (Trivy sees zip 8.6.0)
   # and no pip floor can reach it. Entered Trivy's DB before the
-  # 2026-10-29 nightly, which failed all 36 build jobs on it. No
-  # newer wheel helps yet: py-rattler 0.28.0 (2026-10-23), the latest,
-  # still bundles zip 9.0.4. rattler only extracts conda packages from
-  # the channels it is pointed at, and nothing in these notebooks runs it.
+  # 2026-10-29 nightly, which failed all 36 build jobs on it. py-rattler
+  # 0.28.1 (2026-10-29) bundles a fixed zip 9.1.3, but see the next entry
+  # for why the base's copy is not replaced from PyPI. rattler only
+  # extracts conda packages from the channels it is pointed at, and
+  # nothing in these notebooks runs it.
   #
   # Drop once the base image ships a rattler built against zip >= 9.0.5.
   - id: CVE-2026-115905
+    paths:
+      - "opt/conda/lib/python3.13/site-packages/rattler/rattler.abi3.so"
+
+  # CVE-2026-115907 / CVE-2026-115908 / CVE-2026-115909 (GHSA-9hj8-73fh-9963,
+  # GHSA-hjqx-j4rw-g7xv, GHSA-q7v9-x93c-xqv3) - three more zip-crate HIGHs,
+  # all fixed in 9.0.0: a ZIP64-size DoS in the legacy Shrink/Reduce/Implode
+  # decoder, a symlink-target write outside the extraction directory, and
+  # unbounded symlink-target handling that can abort or exhaust memory.
+  #
+  # Same file and same reasoning as CVE-2026-115905 above: Trivy finds zip
+  # 8.6.0 compiled into the base image's rattler.abi3.so, no pip floor in
+  # this repo reaches it, and nothing in these notebooks runs rattler. The
+  # three were published on 2026-10-29, hours after #232 went green, and
+  # failed every build job from the 2026-10-30 nightly on, plus the
+  # dependabot PRs of 10-31. A real in-image fix exists in principle:
+  # py-rattler 0.28.1 ships zip 9.1.3, but only as a 25 MB PyPI wheel, and
+  # floor-installing it over the base's conda copy would add that to every
+  # image, -small included, for a tool the notebooks never invoke. So this
+  # stays a suppression, scoped to the one file.
+  #
+  # Drop together with CVE-2026-115905 once the base image ships a rattler
+  # built against zip >= 9.0.5 (py-rattler >= 0.28.1).
+  - id: CVE-2026-115907
+    paths:
+      - "opt/conda/lib/python3.13/site-packages/rattler/rattler.abi3.so"
+  - id: CVE-2026-115908
+    paths:
+      - "opt/conda/lib/python3.13/site-packages/rattler/rattler.abi3.so"
+  - id: CVE-2026-115909
     paths:
       - "opt/conda/lib/python3.13/site-packages/rattler/rattler.abi3.so"
 
