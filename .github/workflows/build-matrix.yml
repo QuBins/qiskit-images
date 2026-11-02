@@ -815,10 +815,27 @@ jobs:
           # refused as stale, and nothing was published. So an arch
           # that looks stale is only believed after the listing has
           # said so several times.
+          #
+          # The API call itself can also fail outright: on 2026-11-02
+          # (run 41476224017) three manifest jobs died on a single
+          # `gh: Server Error (HTTP 502)` from this listing, with every
+          # build job green. So retry the call a few times before giving
+          # up on it.
           list_ok_jobs() {
-            gh api --paginate \
-              "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/${RUN_ATTEMPT}/jobs?per_page=100" \
-              --jq '.jobs[] | select(.conclusion == "success") | .name' > /tmp/ok-jobs.txt
+            local try
+            for try in 1 2 3 4 5; do
+              if gh api --paginate \
+                "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/${RUN_ATTEMPT}/jobs?per_page=100" \
+                --jq '.jobs[] | select(.conclusion == "success") | .name' > /tmp/ok-jobs.txt; then
+                return 0
+              fi
+              if [ "$try" -lt 5 ]; then
+                echo "Jobs listing failed (attempt ${try}/5); retrying in $((try * 15))s."
+                sleep $((try * 15))
+              fi
+            done
+            echo "::error::Could not list this run's jobs after 5 attempts."
+            return 1
           }
           looks_stale() {
             ! grep -Fxq "build ${VERSION} (${1})" /tmp/ok-jobs.txt \
