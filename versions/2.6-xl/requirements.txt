@@ -96,7 +96,7 @@ qiskit-basis-constructor~=0.1.0
 qiskit-paulice~=0.2.1
 samplomatic~=0.21.0
 qctrl-visualizer~=11.0.0
-category_encoders~=2.11.1
+category_encoders~=2.11.2
 imbalanced-learn~=0.14.2
 # Surfaced by the first weekly drift report (QuBins#161). qrmi is a
 # Rust extension but ships cp311-abi3 manylinux_2_28 wheels for both
