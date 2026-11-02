@@ -102,14 +102,23 @@ vulnerabilities:
   # this repo reaches it, and nothing in these notebooks runs rattler. The
   # three were published on 2026-10-29, hours after #232 went green, and
   # failed every build job from the 2026-10-30 nightly on, plus the
-  # dependabot PRs of 10-31. A real in-image fix exists in principle:
-  # py-rattler 0.28.1 ships zip 9.1.3, but only as a 25 MB PyPI wheel, and
-  # floor-installing it over the base's conda copy would add that to every
-  # image, -small included, for a tool the notebooks never invoke. So this
-  # stays a suppression, scoped to the one file.
+  # dependabot PRs of 10-31.
   #
-  # Drop together with CVE-2026-115905 once the base image ships a rattler
-  # built against zip >= 9.0.5 (py-rattler >= 0.28.1).
+  # Why this is not a `py-rattler>=0.28.1` floor on the Dockerfile's
+  # post-install line, although 0.28.1 ships a fixed zip 9.1.3 and the
+  # wheel would cost only 24-27 MB compressed (80 MB unpacked) per image:
+  # the base (tag 2026-09-29) runs conda 26.7.2, which requires
+  # conda-rattler-solver, and every conda-rattler-solver release so far
+  # caps py-rattler below 0.28 (0.1.1: <0.26, 0.2.0: <0.28). A floor
+  # would therefore fail the Dockerfile's `pip check` gate, and a
+  # mismatched py-rattler could break conda's plugin loading for anyone
+  # who runs conda in a notebook. So this stays a suppression, scoped to
+  # the one file.
+  #
+  # Drop together with CVE-2026-115905 once the base ships a py-rattler
+  # >= 0.28.1 (i.e. a conda-rattler-solver that admits it), which will
+  # also let GHSA-4w2j-m93h-cj5j above go: 0.28.x bundles quinn-proto
+  # 0.11.19.
   - id: CVE-2026-115907
     paths:
       - "opt/conda/lib/python3.13/site-packages/rattler/rattler.abi3.so"
